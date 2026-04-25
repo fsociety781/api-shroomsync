@@ -1,0 +1,697 @@
+{
+  "info": {
+    "name": "ShroomSync API",
+    "description": "ShroomSync IoT Backend — MQTT Bridge, REST API & Real-time Gateway\n\nBase URL: http://localhost:3000",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "deviceId",
+      "value": "SHROOMSYNC-ESP32-TEST",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🏥 Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Check server status, uptime, and version."
+          }
+        }
+      ]
+    },
+    {
+      "name": "📱 Device Management",
+      "item": [
+        {
+          "name": "List All Devices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices"]
+            },
+            "description": "Get all registered devices with their configurations."
+          }
+        },
+        {
+          "name": "Get Device Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}"]
+            },
+            "description": "Get a specific device with its full config (setpoints, timers, schedules)."
+          }
+        },
+        {
+          "name": "Register New Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"SHROOMSYNC-ESP32-NEW\",\n  \"name\": \"Kumbung Jamur Utama\",\n  \"hardwareVersion\": \"1.0\",\n  \"firmwareVersion\": \"1.1.0\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices"]
+            },
+            "description": "Register a new ShroomSync device. Auto-creates a default DeviceConfig."
+          }
+        },
+        {
+          "name": "Delete Device",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}"]
+            },
+            "description": "Remove a device and all its telemetry, config, and OTA logs (cascade delete)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎮 Control & Commands",
+      "description": "Send commands to ESP32 devices via MQTT. Each request validates input with Zod, then publishes to the appropriate MQTT topic.",
+      "item": [
+        {
+          "name": "Change Control Mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/control/mode",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "control", "mode"]
+            },
+            "description": "Change device control mode.\n\n**Values:**\n- `1` = Manual\n- `2` = Auto (Fuzzy/SetPoint)\n- `3` = Hybrid/Schedule\n\n**MQTT Topic:** `{deviceId}/cmd/control/mode`"
+          }
+        },
+        {
+          "name": "Update Setpoints",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MinS\": 25,\n  \"MidS\": 28,\n  \"MinK\": 75,\n  \"MidK\": 90\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/setpoint",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "setpoint"]
+            },
+            "description": "Update temperature and humidity setpoints for Auto mode.\n\n- **MinS** — Minimum Suhu (°C)\n- **MidS** — Mid Suhu (°C)\n- **MinK** — Minimum Kelembaban (%)\n- **MidK** — Mid Kelembaban (%)\n\n**MQTT Topic:** `{deviceId}/cmd/setpoint/auto`"
+          }
+        },
+        {
+          "name": "Update Pump Timer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Menit\": 1,\n  \"Detik\": 30\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/timer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "timer"]
+            },
+            "description": "Update main pump timer cycle duration.\n\n**MQTT Topic:** `{deviceId}/cmd/timer/auto`"
+          }
+        },
+        {
+          "name": "Update Floor Pump Timer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"FlrMenit\": 2,\n  \"FlrDetik\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/timer/floor",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "timer", "floor"]
+            },
+            "description": "Update floor pump timer cycle duration.\n\n**MQTT Topic:** `{deviceId}/cmd/timer/floor`"
+          }
+        },
+        {
+          "name": "Update Schedule Slots",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jam1\": 7,\n  \"menit1\": 0,\n  \"jam2\": 12,\n  \"menit2\": 0,\n  \"jam3\": 18,\n  \"menit3\": 30\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/schedule",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "schedule"]
+            },
+            "description": "Update all 3 schedule time slots at once.\n\n**MQTT Topic:** `{deviceId}/cmd/schedule/update`"
+          }
+        },
+        {
+          "name": "Update Floor Pump Schedule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"FlrJam\": 8,\n  \"FlrMenit\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/schedule/floor",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "schedule", "floor"]
+            },
+            "description": "Update floor pump schedule time.\n\n**MQTT Topic:** `{deviceId}/cmd/schedule/floor`"
+          }
+        },
+        {
+          "name": "Change Schedule Mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/schedule/mode",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "schedule", "mode"]
+            },
+            "description": "Change schedule mode.\n\n**Values:**\n- `1` = 1x sehari\n- `2` = 2x sehari\n- `3` = 3x sehari\n\n**MQTT Topic:** `{deviceId}/cmd/schedule/mode`"
+          }
+        },
+        {
+          "name": "🟢 Manual Pump ON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"on\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/actuator/pump",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "actuator", "pump"]
+            },
+            "description": "Manual override: turn mist pump ON.\n\n**MQTT Topic:** `{deviceId}/cmd/actuator/pump`"
+          }
+        },
+        {
+          "name": "🔴 Manual Pump OFF",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"on\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/actuator/pump",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "actuator", "pump"]
+            },
+            "description": "Manual override: turn mist pump OFF.\n\n**MQTT Topic:** `{deviceId}/cmd/actuator/pump`"
+          }
+        },
+        {
+          "name": "🟢 Manual Fan ON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"on\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/actuator/fan",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "actuator", "fan"]
+            },
+            "description": "Manual override: turn fan/floor pump ON.\n\n**MQTT Topic:** `{deviceId}/cmd/actuator/fan`"
+          }
+        },
+        {
+          "name": "🔴 Manual Fan OFF",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"on\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/actuator/fan",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "actuator", "fan"]
+            },
+            "description": "Manual override: turn fan/floor pump OFF.\n\n**MQTT Topic:** `{deviceId}/cmd/actuator/fan`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Telemetry",
+      "item": [
+        {
+          "name": "Get Latest Sensor Telemetry",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/telemetry/sensor/latest",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "telemetry", "sensor", "latest"]
+            },
+            "description": "Get the most recent sensor reading (suhu, kelembaban) for a device."
+          }
+        },
+        {
+          "name": "Query Sensor Telemetry History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/telemetry/sensor?limit=50&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "telemetry", "sensor"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Number of records (max 1000)"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Pagination offset"
+                },
+                {
+                  "key": "from",
+                  "value": "2026-04-20T00:00:00Z",
+                  "description": "Start datetime (ISO 8601)",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-04-24T23:59:59Z",
+                  "description": "End datetime (ISO 8601)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Query historical sensor data with pagination.\n\nOptional filters:\n- `from` — Start datetime (ISO 8601)\n- `to` — End datetime (ISO 8601)\n- `limit` — Max records (default: 100, max: 1000)\n- `offset` — Pagination offset"
+          }
+        },
+        {
+          "name": "Get Latest History Telemetry",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/telemetry/history/latest",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "telemetry", "history", "latest"]
+            },
+            "description": "Get the most recent system state reading (mode, pump) for a device."
+          }
+        },
+        {
+          "name": "Query System History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/telemetry/history?limit=50&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "telemetry", "history"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Number of records (max 1000)"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Pagination offset"
+                },
+                {
+                  "key": "from",
+                  "value": "2026-04-20T00:00:00Z",
+                  "description": "Start datetime (ISO 8601)",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-04-24T23:59:59Z",
+                  "description": "End datetime (ISO 8601)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Query historical system state data with pagination.\n\nOptional filters:\n- `from` — Start datetime (ISO 8601)\n- `to` — End datetime (ISO 8601)\n- `limit` — Max records (default: 100, max: 1000)\n- `offset` — Pagination offset"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🚀 OTA Updates",
+      "item": [
+        {
+          "name": "Trigger OTA (Single Device)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"update\",\n  \"hardware_version\": \"1.0\",\n  \"firmware_version\": \"1.2.0\",\n  \"url\": \"http://cdn.example.com/firmware/v1.2.0.bin\",\n  \"checksum_sha256\": \"\",\n  \"force\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ota/trigger/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ota", "trigger", "{{deviceId}}"]
+            },
+            "description": "Trigger OTA firmware update for a specific device.\n\n⚠️ `hardware_version` MUST match the device's HARDWARE_VERSION or it will abort.\n\n**MQTT Topic:** `shroomsync/ota/{deviceId}/trigger`"
+          }
+        },
+        {
+          "name": "Trigger OTA (Broadcast All)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"update\",\n  \"hardware_version\": \"1.0\",\n  \"firmware_version\": \"1.2.0\",\n  \"url\": \"http://cdn.example.com/firmware/v1.2.0.bin\",\n  \"checksum_sha256\": \"\",\n  \"force\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ota/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ota", "broadcast"]
+            },
+            "description": "Trigger OTA firmware update for ALL online devices simultaneously.\n\n⚠️ Use with caution — this affects the entire fleet!\n\n**MQTT Topic:** `shroomsync/ota/broadcast`"
+          }
+        },
+        {
+          "name": "Get OTA Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ota/logs/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ota", "logs", "{{deviceId}}"]
+            },
+            "description": "Get OTA update history for a device (status, progress, firmware version)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚠️ Error Testing",
+      "item": [
+        {
+          "name": "404 — Device Not Found",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/NON-EXISTENT-ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "NON-EXISTENT-ID"]
+            },
+            "description": "Test 404 error handling — requesting a device that doesn't exist."
+          }
+        },
+        {
+          "name": "400 — Invalid Control Mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": 99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/control/mode",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "control", "mode"]
+            },
+            "description": "Test validation error — mode must be 1-3."
+          }
+        },
+        {
+          "name": "400 — Missing Required Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices"]
+            },
+            "description": "Test validation error — deviceId is required."
+          }
+        },
+        {
+          "name": "409 — Duplicate Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"SHROOMSYNC-ESP32-TEST\",\n  \"name\": \"Duplicate Test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices"]
+            },
+            "description": "Test conflict error — registering a device that already exists."
+          }
+        },
+        {
+          "name": "404 — Route Not Found",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invalid-route",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invalid-route"]
+            },
+            "description": "Test 404 for non-existent API route."
+          }
+        }
+      ]
+    }
+  ]
+}

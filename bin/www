@@ -1,0 +1,116 @@
+#!/usr/bin/env node
+
+// ============================================
+// ShroomSync Backend — Server Entry Point
+// Boots HTTP + Socket.IO + MQTT
+// ============================================
+
+// Load env first
+require('dotenv').config();
+
+const app = require('../app');
+const http = require('http');
+const config = require('../src/config');
+
+// Services
+const mqttService = require('../src/services/mqtt.service');
+const socketService = require('../src/services/socket.service');
+const telemetryService = require('../src/services/telemetry.service');
+
+// ── Create HTTP Server ────────────────────────
+const server = http.createServer(app);
+
+// ── Initialize Socket.IO ──────────────────────
+socketService.init(server);
+
+// ── Connect MQTT ──────────────────────────────
+mqttService.connect();
+
+// ── Start Telemetry Retention Job ─────────────
+telemetryService.startRetentionJob();
+
+// ── Start Listening ───────────────────────────
+const PORT = config.port;
+server.listen(PORT, () => {
+  console.log('');
+  console.log('╔══════════════════════════════════════════════╗');
+  console.log('║       🍄 ShroomSync Backend Server 🍄        ║');
+  console.log('╠══════════════════════════════════════════════╣');
+  console.log(`║  HTTP API:    http://localhost:${PORT}           ║`);
+  console.log(`║  Socket.IO:   ws://localhost:${PORT}             ║`);
+  console.log(`║  MQTT Broker: ${config.mqtt.brokerUrl.padEnd(27)}   ║`);
+  console.log(`║  Environment: ${config.nodeEnv.padEnd(27)}   ║`);
+  console.log('╚══════════════════════════════════════════════╝');
+  console.log('');
+  console.log('API Endpoints:');
+  console.log('  GET    /api/health');
+  console.log('  GET    /api/v1/devices');
+  console.log('  POST   /api/v1/devices');
+  console.log('  GET    /api/v1/devices/:id');
+  console.log('  DELETE /api/v1/devices/:id');
+  console.log('  POST   /api/v1/devices/:id/control/mode');
+  console.log('  POST   /api/v1/devices/:id/setpoint');
+  console.log('  POST   /api/v1/devices/:id/timer');
+  console.log('  POST   /api/v1/devices/:id/timer/floor');
+  console.log('  POST   /api/v1/devices/:id/schedule');
+  console.log('  POST   /api/v1/devices/:id/schedule/floor');
+  console.log('  POST   /api/v1/devices/:id/schedule/mode');
+  console.log('  POST   /api/v1/devices/:id/actuator/pump');
+  console.log('  POST   /api/v1/devices/:id/actuator/fan');
+  console.log('  GET    /api/v1/devices/:id/telemetry');
+  console.log('  GET    /api/v1/devices/:id/telemetry/latest');
+  console.log('  POST   /api/v1/ota/trigger/:id');
+  console.log('  POST   /api/v1/ota/broadcast');
+  console.log('  GET    /api/v1/ota/logs/:id');
+  console.log('');
+});
+
+// ── Error Handling ────────────────────────────
+server.on('error', (error) => {
+  if (error.syscall !== 'listen') throw error;
+
+  switch (error.code) {
+    case 'EACCES':
+      console.error(`Port ${PORT} requires elevated privileges`);
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(`Port ${PORT} is already in use`);
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+});
+
+// ── Graceful Shutdown ─────────────────────────
+function shutdown(signal) {
+  console.log(`\n[SERVER] ${signal} received. Shutting down gracefully...`);
+
+  // Stop accepting new connections
+  server.close(() => {
+    console.log('[SERVER] HTTP server closed');
+  });
+
+  // Disconnect MQTT
+  mqttService.disconnect();
+
+  // Stop telemetry retention job
+  telemetryService.stopRetentionJob();
+
+  // Disconnect Prisma
+  const prisma = require('../src/utils/prisma');
+  prisma.$disconnect().then(() => {
+    console.log('[SERVER] Database disconnected');
+    process.exit(0);
+  });
+
+  // Force exit after 10 seconds
+  setTimeout(() => {
+    console.error('[SERVER] Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

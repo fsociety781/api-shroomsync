@@ -1,0 +1,122 @@
+// ============================================
+// ShroomSync Database Schema
+// MariaDB / MySQL via Prisma ORM
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Device Registry ──────────────────────────
+model Device {
+  id              String    @id @default(uuid())
+  deviceId        String    @unique @map("device_id")
+  name            String?   @db.VarChar(100)
+  hardwareVersion String    @default("1.0") @map("hardware_version") @db.VarChar(20)
+  firmwareVersion String    @default("1.0.0") @map("firmware_version") @db.VarChar(20)
+  isOnline        Boolean   @default(false) @map("is_online")
+  lastSeenAt      DateTime? @map("last_seen_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  config           DeviceConfig?
+  sensorTelemetry  SensorTelemetry[]
+  historyTelemetry HistoryTelemetry[]
+  otaLogs          OtaLog[]
+
+  @@map("devices")
+}
+
+// ── Device Configuration (mirrors EEPROM) ────
+model DeviceConfig {
+  id       String @id @default(uuid())
+  deviceId String @unique @map("device_id")
+  device   Device @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+
+  // Control Mode: 1=Manual, 2=Auto, 3=Hybrid
+  controlMode  Int @default(2) @map("control_mode")
+  // Schedule Mode: 1=1x sehari, 2=2x, 3=3x
+  scheduleMode Int @default(1) @map("schedule_mode")
+
+  // Setpoints (Auto Mode)
+  minS Int @default(0) @map("min_suhu")
+  midS Int @default(0) @map("mid_suhu")
+  minK Int @default(0) @map("min_kelembaban")
+  midK Int @default(0) @map("mid_kelembaban")
+
+  // Timer (Timer Mode) — minutes & seconds
+  timerMinute Int @default(0) @map("timer_minute")
+  timerSecond Int @default(0) @map("timer_second")
+
+  // Floor Pump Timer
+  floorTimerMinute Int @default(0) @map("floor_timer_minute")
+  floorTimerSecond Int @default(0) @map("floor_timer_second")
+
+  // Schedule Slots (Schedule Mode)
+  schedule1Hour   Int @default(0) @map("schedule1_hour")
+  schedule1Minute Int @default(0) @map("schedule1_minute")
+  schedule2Hour   Int @default(0) @map("schedule2_hour")
+  schedule2Minute Int @default(0) @map("schedule2_minute")
+  schedule3Hour   Int @default(0) @map("schedule3_hour")
+  schedule3Minute Int @default(0) @map("schedule3_minute")
+
+  // Floor Pump Schedule
+  floorScheduleHour   Int @default(0) @map("floor_schedule_hour")
+  floorScheduleMinute Int @default(0) @map("floor_schedule_minute")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("device_configs")
+}
+
+// ── Sensor Telemetry (Fast Data) ─────────────
+model SensorTelemetry {
+  id          String   @id @default(uuid())
+  deviceId    String   @map("device_id")
+  device      Device   @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  temperature Float
+  humidity    Float
+  recordedAt  String?  @map("recorded_at") @db.VarChar(50)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([deviceId, createdAt])
+  @@map("sensor_telemetry")
+}
+
+// ── History Telemetry (System Snapshot) ────────
+model HistoryTelemetry {
+  id              String   @id @default(uuid())
+  deviceId        String   @map("device_id")
+  device          Device   @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  temperature     Float
+  humidity        Float
+  mode            String?  @db.VarChar(20)
+  pumpStatus      String?  @map("pump_status") @db.VarChar(10)
+  floorPumpStatus String?  @map("floor_pump_status") @db.VarChar(10)
+  recordedAt      String?  @map("recorded_at") @db.VarChar(50)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([deviceId, createdAt])
+  @@map("history_telemetry")
+}
+
+// ── OTA Update Logs ──────────────────────────
+model OtaLog {
+  id              String    @id @default(uuid())
+  deviceId        String    @map("device_id")
+  device          Device    @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  firmwareVersion String?   @map("firmware_version") @db.VarChar(20)
+  firmwareUrl     String?   @map("firmware_url") @db.VarChar(500)
+  progress        Int       @default(0)
+  status          String    @default("pending") @db.VarChar(30)
+  triggeredAt     DateTime  @default(now()) @map("triggered_at")
+  completedAt     DateTime? @map("completed_at")
+
+  @@index([deviceId, triggeredAt])
+  @@map("ota_logs")
+}
