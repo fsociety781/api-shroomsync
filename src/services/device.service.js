@@ -79,8 +79,17 @@ class DeviceService {
   /**
    * Mark device as online and update lastSeenAt.
    * Called by MQTT service when a message arrives from this device.
+   * Uses throttling to prevent spamming DB on rapid MQTT bursts.
    */
   async markOnline(deviceId) {
+    if (!this._onlineCache) this._onlineCache = new Map();
+    const lastUpdate = this._onlineCache.get(deviceId) || 0;
+    
+    // Only update DB once every 10 seconds per device
+    if (Date.now() - lastUpdate < 10000) {
+      return;
+    }
+    
     try {
       await prisma.device.update({
         where: { deviceId },
@@ -89,9 +98,11 @@ class DeviceService {
           lastSeenAt: new Date(),
         },
       });
+      this._onlineCache.set(deviceId, Date.now());
     } catch {
       // Device not registered yet — auto-register
       await this.ensureDevice(deviceId);
+      this._onlineCache.set(deviceId, Date.now());
     }
   }
 

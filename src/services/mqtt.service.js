@@ -185,17 +185,26 @@ const mqttService = {
 
   /**
    * Validate that a deviceId exists in the database.
-   * This ensures we only process traffic for devices that have been created.
+   * Uses an in-memory cache to prevent DB spam on every MQTT message.
    */
   async _isValidDeviceId(deviceId) {
     if (!deviceId || deviceId.length < 3) return false;
+    
+    // Check memory cache first (cache invalidates every 5 minutes to catch deletions)
+    if (!this._deviceCache) this._deviceCache = new Map();
+    const cached = this._deviceCache.get(deviceId);
+    if (cached && (Date.now() - cached.timestamp < 5 * 60 * 1000)) {
+      return cached.valid;
+    }
     
     // Dynamically check if device is registered in the system
     try {
       const existing = await prisma.device.findUnique({
         where: { deviceId }
       });
-      return !!existing;
+      const valid = !!existing;
+      this._deviceCache.set(deviceId, { valid, timestamp: Date.now() });
+      return valid;
     } catch {
       return false;
     }
@@ -212,6 +221,12 @@ const mqttService = {
       handled = true;
     } else if (topic.endsWith('/telemetry/history')) {
       await this._handleHistoryTelemetry(deviceId, data);
+      handled = true;
+    } else if (topic.endsWith('/telemetry/heartbeat')) {
+      await this._handleHeartbeatTelemetry(deviceId, data);
+      handled = true;
+    } else if (topic.endsWith('/state/actuator')) {
+      await this._handleStateActuator(deviceId, data);
       handled = true;
     } else if (topic.endsWith('/state/control/mode')) {
       await this._handleStateControlMode(deviceId, data);
@@ -235,7 +250,7 @@ const mqttService = {
     } else if (topic.endsWith('/state/schedule/floor')) {
       await this._handleStateFloorSchedule(deviceId, data);
       handled = true;
-    } else if (topic.match(/^shroomsync\/ota\/.+\/status$/)) {
+    } else if (topic.match(/^shroomsync\/ota\/.+\/status$/) || topic.endsWith('/legacy/ota/status')) {
       await this._handleOtaStatus(deviceId, data);
       handled = true;
     }
@@ -271,8 +286,39 @@ const mqttService = {
     socketService.emitHistoryTelemetry(deviceId, data);
   },
 
+  async _handleHeartbeatTelemetry(deviceId, data) {
+    await deviceService.markOnline(deviceId);
+
+    // Update firmware/hardware version and diagnostic fields if provided
+    if (data.firmware_version || data.hardware_version || data.rssi_dbm != null || data.uptime_ms != null) {
+      try {
+        const update = {};
+        if (data.firmware_version) update.firmwareVersion = data.firmware_version;
+        if (data.hardware_version) update.hardwareVersion = data.hardware_version;
+        if (data.rssi_dbm != null) update.rssiDbm = parseInt(data.rssi_dbm, 10);
+        if (data.uptime_ms != null) update.uptimeMs = parseInt(data.uptime_ms, 10);
+        if (data.sensor_valid != null) update.sensorValid = !!data.sensor_valid;
+        
+        const prisma = require('../utils/prisma');
+        await prisma.device.update({
+          where: { deviceId },
+          data: update,
+        });
+      } catch (err) {
+        console.error(`[MQTT] Failed to update device versions for ${deviceId}:`, err.message);
+      }
+    }
+
+    // Emit heartbeat via socket
+    socketService.emitDeviceState(deviceId, 'heartbeat', data);
+  },
+
   // ── STATE HANDLERS ──────────────────────────
   // These fire when the ESP32 reports its current config state.
+
+  async _handleStateActuator(deviceId, data) {
+    socketService.emitDeviceState(deviceId, 'actuator', data);
+  },
 
   async _handleStateControlMode(deviceId, data) {
     if (data.mode == null) return;

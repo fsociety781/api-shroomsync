@@ -578,6 +578,33 @@
             },
             "description": "Get OTA update history for a device (status, progress, firmware version)."
           }
+        },
+        {
+          "name": "Trigger Legacy OTA (Single Device)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"update\",\n  \"hardware_version\": \"1.0\",\n  \"firmware_version\": \"1.2.0\",\n  \"url\": \"http://cdn.example.com/firmware/v1.2.0.bin\",\n  \"checksum_sha256\": \"\",\n  \"force\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ota/legacy-trigger/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ota", "legacy-trigger", "{{deviceId}}"]
+            },
+            "description": "Trigger legacy OTA firmware update for a specific device.\n\n**MQTT Topic:** `{deviceId}/legacy/ota/trigger`"
+          }
         }
       ]
     },

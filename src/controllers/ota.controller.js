@@ -38,6 +38,31 @@ const otaController = {
   }),
 
   /**
+   * POST /api/v1/ota/legacy-trigger/:deviceId
+   * Trigger OTA update for a legacy device.
+   */
+  legacyTriggerDevice: asyncHandler(async (req, res) => {
+    const data = otaTriggerSchema.parse(req.body);
+    const { deviceId } = req.params;
+    const topics = buildTopics(deviceId);
+
+    // Log the OTA trigger
+    await otaService.createLog(deviceId, {
+      firmwareVersion: data.firmware_version,
+      firmwareUrl: data.url,
+    });
+
+    // Publish to the legacy OTA trigger topic
+    const success = mqttService.publish(topics.legacyOtaTrigger, data);
+
+    if (!success) {
+      return ApiResponse.error(res, 'MQTT broker not connected', 503);
+    }
+
+    ApiResponse.success(res, { topic: topics.legacyOtaTrigger, payload: data }, `Legacy OTA trigger sent to ${deviceId}`);
+  }),
+
+  /**
    * POST /api/v1/ota/broadcast
    * Trigger OTA update for ALL devices.
    */

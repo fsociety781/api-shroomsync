@@ -7,6 +7,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 
+// Configuration
+const config = require('./src/config');
+
 // Routes
 const deviceRoutes = require('./src/routes/device.routes');
 const controlRoutes = require('./src/routes/control.routes');
@@ -15,19 +18,33 @@ const otaRoutes = require('./src/routes/ota.routes');
 
 // Middleware
 const errorHandler = require('./src/middleware/error-handler');
+const { globalLimiter, strictLimiter } = require('./src/middleware/rate-limiter');
+const logger = require('./src/utils/logger');
 
 const app = express();
 
-// ── Security ──────────────────────────────────
+// ── Security: Helmet ──────────────────────────
 app.use(helmet());
-app.use(cors({ origin: '*' }));
+
+// ── Security: CORS (Production-ready) ────────
+app.use(cors(config.cors));
+
+// ── Rate Limiting ─────────────────────────────
+app.use(globalLimiter);
 
 // ── Parsing ───────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ── Logging ───────────────────────────────────
+// ── Logging (Morgan + Structured) ────────────
 app.use(morgan('dev'));
+
+// ── Request ID & Context ──────────────────────
+app.use((req, res, next) => {
+  req.id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  res.setHeader('X-Request-ID', req.id);
+  next();
+});
 
 // ── Health Check ──────────────────────────────
 app.get('/api/health', (req, res) => {
@@ -37,20 +54,26 @@ app.get('/api/health', (req, res) => {
     version: '1.0.0',
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
+    environment: config.nodeEnv,
   });
 });
 
 // ── API Routes (v1) ───────────────────────────
 app.use('/api/v1/devices', deviceRoutes);
-app.use('/api/v1/devices', controlRoutes);
+app.use('/api/v1/devices', strictLimiter, controlRoutes); // Stricter limit for control
 app.use('/api/v1/devices', telemetryRoutes);
-app.use('/api/v1/ota', otaRoutes);
+app.use('/api/v1/ota', strictLimiter, otaRoutes); // Stricter limit for OTA
 
 // ── 404 Handler ───────────────────────────────
 app.use((req, res) => {
+  logger.warn(
+    { method: req.method, path: req.path },
+    'Route not found'
+  );
   res.status(404).json({
     status: 'error',
     message: `Route ${req.method} ${req.path} not found`,
+    timestamp: new Date().toISOString(),
   });
 });
 

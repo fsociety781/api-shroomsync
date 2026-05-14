@@ -8,8 +8,9 @@ const otaController = require('../controllers/ota.controller');
 
 const router = Router();
 
-router.post('/trigger/:deviceId', otaController.triggerDevice);
-router.post('/broadcast',         otaController.broadcast);
-router.get('/logs/:deviceId',     otaController.getLogs);
+router.post('/trigger/:deviceId',        otaController.triggerDevice);
+router.post('/legacy-trigger/:deviceId', otaController.legacyTriggerDevice);
+router.post('/broadcast',                otaController.broadcast);
+router.get('/logs/:deviceId',            otaController.getLogs);
 
 module.exports = router;
