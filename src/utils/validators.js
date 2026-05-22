@@ -4,6 +4,25 @@
 
 const { z } = require('zod');
 
+const dateValue = z.coerce.date({
+  invalid_type_error: 'Must be a valid date',
+});
+
+const optionalDateValue = z.preprocess(
+  (value) => (value === '' || value == null ? undefined : value),
+  dateValue.optional()
+);
+
+const nullableDateValue = z.preprocess(
+  (value) => (value === '' ? null : value),
+  dateValue.nullable().optional()
+);
+
+const nullableText = (max) => z.preprocess(
+  (value) => (value === '' ? null : value),
+  z.string().trim().min(1).max(max).nullable().optional()
+);
+
 // ── Device ────────────────────────────────────
 const createDeviceSchema = z.object({
   deviceId: z.string().min(1, 'device_id is required').max(50),
@@ -83,6 +102,90 @@ const telemetryQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+// ── Cultivation Cycle ─────────────────────────
+const cycleStatusSchema = z.enum(['active', 'completed', 'cancelled']);
+
+const createCycleSchema = z.object({
+  name: nullableText(120),
+  mushroomType: z.string().trim().min(1).max(100).default('Jamur Tiram'),
+  strain: nullableText(100),
+  baglogCount: z.number().int().positive().optional().nullable(),
+  startedAt: z.preprocess(
+    (value) => (value === '' || value == null ? undefined : value),
+    dateValue.optional().default(() => new Date())
+  ),
+  expectedEndedAt: nullableDateValue,
+  status: cycleStatusSchema.default('active'),
+  notes: nullableText(5000),
+}).superRefine((data, ctx) => {
+  if (data.expectedEndedAt && data.expectedEndedAt < data.startedAt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['expectedEndedAt'],
+      message: 'expectedEndedAt must be after startedAt',
+    });
+  }
+});
+
+const updateCycleSchema = z.object({
+  name: nullableText(120),
+  mushroomType: z.string().trim().min(1).max(100).optional(),
+  strain: nullableText(100),
+  baglogCount: z.number().int().positive().nullable().optional(),
+  startedAt: optionalDateValue,
+  expectedEndedAt: nullableDateValue,
+  endedAt: nullableDateValue,
+  status: cycleStatusSchema.optional(),
+  notes: nullableText(5000),
+}).refine(data => Object.keys(data).length > 0, {
+  message: 'At least one cycle field is required',
+});
+
+const completeCycleSchema = z.object({
+  endedAt: z.preprocess(
+    (value) => (value === '' || value == null ? undefined : value),
+    dateValue.optional().default(() => new Date())
+  ),
+  notes: nullableText(5000),
+});
+
+const cycleQuerySchema = z.object({
+  status: cycleStatusSchema.optional(),
+  from: optionalDateValue,
+  to: optionalDateValue,
+  limit: z.coerce.number().int().min(1).max(1000).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+// ── Harvest Record ────────────────────────────
+const createHarvestSchema = z.object({
+  harvestedAt: z.preprocess(
+    (value) => (value === '' || value == null ? undefined : value),
+    dateValue.optional().default(() => new Date())
+  ),
+  weightKg: z.number().positive(),
+  pricePerKg: z.number().nonnegative().optional().nullable(),
+  grade: nullableText(50),
+  notes: nullableText(5000),
+});
+
+const updateHarvestSchema = z.object({
+  harvestedAt: optionalDateValue,
+  weightKg: z.number().positive().optional(),
+  pricePerKg: z.number().nonnegative().optional().nullable(),
+  grade: nullableText(50),
+  notes: nullableText(5000),
+}).refine(data => Object.keys(data).length > 0, {
+  message: 'At least one harvest field is required',
+});
+
+const harvestQuerySchema = z.object({
+  from: optionalDateValue,
+  to: optionalDateValue,
+  limit: z.coerce.number().int().min(1).max(1000).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 module.exports = {
   createDeviceSchema,
   controlModeSchema,
@@ -95,4 +198,11 @@ module.exports = {
   actuatorSchema,
   otaTriggerSchema,
   telemetryQuerySchema,
+  createCycleSchema,
+  updateCycleSchema,
+  completeCycleSchema,
+  cycleQuerySchema,
+  createHarvestSchema,
+  updateHarvestSchema,
+  harvestQuerySchema,
 };

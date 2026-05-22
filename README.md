@@ -11,6 +11,7 @@
 - **🌐 REST API** — HTTP endpoints untuk kontrol device & monitoring
 - **📡 MQTT Bridge** — Komunikasi real-time dengan ESP32 devices
 - **📊 Real-time Telemetry** — Streaming data suhu, kelembaban, & status aktuator
+- **🍄 Cultivation Cycles** — Pencatatan siklus budidaya dan harvest harian
 - **🔄 OTA Updates** — Update firmware over-the-air untuk semua/sebagian device
 - **🔒 Security** — CORS protection, rate limiting, input validation (Zod)
 - **📝 Structured Logging** — Pino logger dengan context tracking
@@ -155,10 +156,12 @@ api-shroomsync/
 │   ├── controllers/                 # HTTP request handlers
 │   │   ├── device.controller.js
 │   │   ├── control.controller.js
+│   │   ├── cycle.controller.js
 │   │   ├── telemetry.controller.js
 │   │   └── ota.controller.js
 │   ├── services/                    # Business logic layer
 │   │   ├── device.service.js
+│   │   ├── cycle.service.js
 │   │   ├── mqtt.service.js
 │   │   ├── ota.service.js
 │   │   ├── socket.service.js
@@ -166,6 +169,7 @@ api-shroomsync/
 │   ├── routes/                      # URL routing
 │   │   ├── device.routes.js
 │   │   ├── control.routes.js
+│   │   ├── cycle.routes.js
 │   │   ├── telemetry.routes.js
 │   │   └── ota.routes.js
 │   ├── middleware/                  # Express middleware
@@ -221,6 +225,20 @@ GET    /api/v1/devices/:deviceId/telemetry/sensor      Get temperature/humidity 
 GET    /api/v1/devices/:deviceId/telemetry/sensor/latest
 GET    /api/v1/devices/:deviceId/telemetry/history     Get system action log
 GET    /api/v1/devices/:deviceId/telemetry/history/latest
+```
+
+### Cultivation Cycles & Harvest
+```
+GET    /api/v1/devices/:deviceId/cycles                         List cultivation cycles
+POST   /api/v1/devices/:deviceId/cycles                         Create/start cycle
+GET    /api/v1/devices/:deviceId/cycles/:cycleId                Get cycle detail
+PATCH  /api/v1/devices/:deviceId/cycles/:cycleId                Update cycle
+POST   /api/v1/devices/:deviceId/cycles/:cycleId/complete       Complete cycle
+GET    /api/v1/devices/:deviceId/cycles/:cycleId/summary        Cycle harvest analytics
+GET    /api/v1/devices/:deviceId/cycles/:cycleId/harvests       List harvest records
+POST   /api/v1/devices/:deviceId/cycles/:cycleId/harvests       Record harvest
+PATCH  /api/v1/devices/:deviceId/cycles/:cycleId/harvests/:id   Update harvest
+DELETE /api/v1/devices/:deviceId/cycles/:cycleId/harvests/:id   Delete harvest
 ```
 
 ### OTA Updates

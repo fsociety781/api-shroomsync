@@ -6,6 +6,7 @@ const prisma = require('../utils/prisma');
 const { NotFoundError, ConflictError } = require('../utils/errors');
 const fs = require('fs').promises;
 const path = require('path');
+const socketService = require('./socket.service');
 
 class DeviceService {
   /**
@@ -108,15 +109,23 @@ class DeviceService {
 
   /**
    * Mark device as offline.
+   * Emits Socket.IO event to notify connected clients.
    */
   async markOffline(deviceId) {
     try {
-      await prisma.device.update({
+      const device = await prisma.device.update({
         where: { deviceId },
         data: { isOnline: false },
       });
-    } catch {
+
+      // Emit Socket.IO event to notify clients
+      socketService.emitDeviceOffline(deviceId);
+      console.log(`[DeviceService] Device ${deviceId} marked offline`);
+
+      return device;
+    } catch (error) {
       // ignore if device doesn't exist
+      console.debug(`[DeviceService] Failed to mark ${deviceId} offline:`, error.message);
     }
   }
 

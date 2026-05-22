@@ -16,6 +16,7 @@ const config = require('../src/config');
 const mqttService = require('../src/services/mqtt.service');
 const socketService = require('../src/services/socket.service');
 const telemetryService = require('../src/services/telemetry.service');
+const deviceStatusService = require('../src/services/device-status.service');
 
 // ── Create HTTP Server ────────────────────────
 const server = http.createServer(app);
@@ -28,6 +29,9 @@ mqttService.connect();
 
 // ── Start Telemetry Retention Job ─────────────
 telemetryService.startRetentionJob();
+
+// ── Start Device Status Timeout Job ────────────
+deviceStatusService.startTimeoutJob();
 
 // ── Start Listening ───────────────────────────
 const PORT = config.port;
@@ -97,6 +101,9 @@ function shutdown(signal) {
 
   // Stop telemetry retention job
   telemetryService.stopRetentionJob();
+
+  // Stop device status timeout job
+  deviceStatusService.stopTimeoutJob();
 
   // Disconnect Prisma
   const prisma = require('../src/utils/prisma');

@@ -4,11 +4,14 @@
 
 require('dotenv').config();
 
+// Calculate isDev early (before config object creation)
+const isDev = (process.env.NODE_ENV || 'development') === 'development';
+
 const config = {
   // Server
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  isDev: (process.env.NODE_ENV || 'development') === 'development',
+  isDev,
 
   // CORS — Production Security
   cors: {
@@ -19,6 +22,7 @@ const config = {
 
   // Rate Limiting
   rateLimiting: {
+    enabled: process.env.RATE_LIMIT_ENABLED === 'true',
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10), // 15 minutes default
     max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10), // 100 requests per window
     skipSuccessfulRequests: false,
@@ -43,9 +47,17 @@ const config = {
   // Telemetry
   telemetryRetentionDays: parseInt(process.env.TELEMETRY_RETENTION_DAYS || '14', 10),
 
+  // Device Status Tracking
+  deviceStatus: {
+    // Timeout in milliseconds before marking device offline (default 5 minutes)
+    offlineTimeoutMs: parseInt(process.env.DEVICE_OFFLINE_TIMEOUT_MS || '300000', 10),
+    // How often to check for timed out devices (default 30 seconds)
+    checkIntervalMs: parseInt(process.env.DEVICE_STATUS_CHECK_INTERVAL_MS || '30000', 10),
+  },
+
   // Logging
   logging: {
-    level: process.env.LOG_LEVEL || (config.isDev ? 'debug' : 'info'),
+    level: process.env.LOG_LEVEL || (isDev ? 'debug' : 'info'),
     prettyPrint: process.env.PRETTY_LOG !== 'false',
   },
 };

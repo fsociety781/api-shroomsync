@@ -6,6 +6,7 @@
 
 const mqtt = require('mqtt');
 const config = require('../config');
+const logger = require('../utils/logger');
 const { SUBSCRIBE_PATTERNS, SERVER_CLIENT_ID } = require('../constants/mqtt-topics');
 const deviceService = require('./device.service');
 const telemetryService = require('./telemetry.service');
@@ -14,6 +15,23 @@ const socketService = require('./socket.service');
 const prisma = require('../utils/prisma');
 
 let client = null;
+
+const SHROOMSYNC_OTA_STATUS_TOPIC_RE = /^shroomsync\/ota\/[^/]+\/status$/;
+const SCHEDULE_SLOT_ROUTE_RE = /^state\/schedule\/slot\/[1-3]$/;
+const SHROOMSYNC_DEVICE_ID_RE = /^(SS|SMC|SH|SHROOMSYNC)-/i;
+const STANDARD_TOPIC_ROUTES = new Set([
+  'telemetry/sensor',
+  'telemetry/history',
+  'telemetry/heartbeat',
+  'state/actuator',
+  'state/control/mode',
+  'state/setpoint/auto',
+  'state/timer/auto',
+  'state/timer/floor',
+  'state/schedule/mode',
+  'state/schedule/floor',
+  'legacy/ota/status',
+]);
 
 const mqttService = {
   /**
@@ -128,40 +146,94 @@ const mqttService = {
    * Route incoming MQTT message to the appropriate handler.
    */
   async _handleMessage(topic, rawPayload) {
-    let payload;
-    try {
-      payload = JSON.parse(rawPayload.toString());
-    } catch {
-      console.warn(`[MQTT] Invalid JSON on ${topic}`);
-      return;
+    // ── Early filter: Skip messages from non-shroomsync devices ──
+    // Messages from lock/*, gboard/*, etc are ignored early
+    if (!this._isShroomSyncTopic(topic)) {
+      return; // silently skip unrelated topics
     }
+
+    const envelope = this._parsePayload(topic, rawPayload);
+    if (!envelope) return;
 
     // ── Filter self-messages ──
-    if (payload.clientId === SERVER_CLIENT_ID) {
+    if (envelope.clientId === SERVER_CLIENT_ID) {
       return;
     }
 
-    // ── Extract effective data (support envelope format) ──
-    const data = payload.data || payload;
-    const deviceIdFromPayload = payload.device_id || null;
-
     // ── Extract deviceId from topic ──
-    const deviceId = this._extractDeviceId(topic, deviceIdFromPayload);
+    const deviceId = this._extractDeviceId(topic, envelope.deviceId);
     if (!deviceId) {
       return; // silently skip — can't determine device
     }
 
-    // ── Filter: only process traffic for registered devices ──
-    // This dynamically matches any prefix based on the created device IDs.
-    const isValid = await this._isValidDeviceId(deviceId);
-    if (!isValid) {
-      return; // silently skip unregistered traffic
+    if (envelope.deviceId && envelope.deviceId !== deviceId) {
+      logger.debug({ topic, topicDeviceId: deviceId, payloadDeviceId: envelope.deviceId }, 'MQTT device_id mismatch');
+      return;
+    }
+
+    const shouldProcess = await this._shouldProcessDevice(deviceId);
+    if (!shouldProcess) {
+      return; // silently skip non-ShroomSync traffic
     }
 
     // ── Route to handler (all async, catch errors) ──
-    this._routeMessage(topic, deviceId, data).catch(err => {
-      console.error(`[MQTT] Handler error for ${topic}:`, err.message);
+    this._routeMessage(topic, deviceId, envelope.data).catch(err => {
+      logger.error({ topic, deviceId, error: err.message }, 'MQTT handler error');
     });
+  },
+
+  /**
+   * Parse MQTT JSON and normalize the firmware envelope:
+   * { device_id, seq, uptime_ms, data, clientId }.
+   * Legacy flat payloads are still accepted as the effective data object.
+   */
+  _parsePayload(topic, rawPayload) {
+    let payload;
+    try {
+      payload = JSON.parse(rawPayload.toString());
+    } catch {
+      logger.debug({ topic }, 'Invalid JSON payload on topic');
+      return null;
+    }
+
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      logger.debug({ topic }, 'Invalid MQTT payload object');
+      return null;
+    }
+
+    const nestedData = payload.data;
+    const hasNestedData = nestedData && typeof nestedData === 'object' && !Array.isArray(nestedData);
+
+    return {
+      raw: payload,
+      data: hasNestedData ? nestedData : payload,
+      deviceId: typeof payload.device_id === 'string' ? payload.device_id : null,
+      seq: payload.seq,
+      uptimeMs: payload.uptime_ms,
+      clientId: payload.clientId,
+    };
+  },
+
+  /**
+   * Check if topic belongs to ShroomSync devices.
+   * Filters out messages from other MQTT devices (lock, gboard, wifi-relay, etc).
+   */
+  _isShroomSyncTopic(topic) {
+    if (SHROOMSYNC_OTA_STATUS_TOPIC_RE.test(topic)) return true;
+
+    const route = this._extractStandardRoute(topic);
+    if (!route) return false;
+
+    return STANDARD_TOPIC_ROUTES.has(route) || SCHEDULE_SLOT_ROUTE_RE.test(route);
+  },
+
+  /**
+   * Extract the topic route after the device id, e.g. telemetry/sensor.
+   */
+  _extractStandardRoute(topic) {
+    const parts = topic.split('/');
+    if (parts.length < 3) return null;
+    return parts.slice(1).join('/');
   },
 
   /**
@@ -208,6 +280,19 @@ const mqttService = {
     } catch {
       return false;
     }
+  },
+
+  /**
+   * Standard ShroomSync IDs can auto-register on first telemetry.
+   * Other IDs are accepted only when they already exist in the database.
+   */
+  async _shouldProcessDevice(deviceId) {
+    if (this._looksLikeShroomSyncDeviceId(deviceId)) return true;
+    return this._isValidDeviceId(deviceId);
+  },
+
+  _looksLikeShroomSyncDeviceId(deviceId) {
+    return SHROOMSYNC_DEVICE_ID_RE.test(deviceId);
   },
 
   /**
@@ -275,7 +360,7 @@ const mqttService = {
 
     // Broadcast via Socket.IO
     socketService.emitSensorTelemetry(deviceId, data);
-    socketService.emitDeviceStatus(deviceId, true);
+    socketService.emitDeviceOnline(deviceId);
   },
 
   async _handleHistoryTelemetry(deviceId, data) {
@@ -284,6 +369,7 @@ const mqttService = {
     await deviceService.markOnline(deviceId);
     await telemetryService.storeHistory(deviceId, data);
     socketService.emitHistoryTelemetry(deviceId, data);
+    socketService.emitDeviceOnline(deviceId);
   },
 
   async _handleHeartbeatTelemetry(deviceId, data) {
@@ -309,7 +395,8 @@ const mqttService = {
       }
     }
 
-    // Emit heartbeat via socket
+    // Emit heartbeat and online status via socket
+    socketService.emitDeviceOnline(deviceId);
     socketService.emitDeviceState(deviceId, 'heartbeat', data);
   },
 

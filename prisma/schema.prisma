@@ -27,10 +27,11 @@ model Device {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  config           DeviceConfig?
-  sensorTelemetry  SensorTelemetry[]
-  historyTelemetry HistoryTelemetry[]
-  otaLogs          OtaLog[]
+  config            DeviceConfig?
+  sensorTelemetry   SensorTelemetry[]
+  historyTelemetry  HistoryTelemetry[]
+  otaLogs           OtaLog[]
+  cultivationCycles CultivationCycle[]
 
   @@map("devices")
 }
@@ -122,4 +123,44 @@ model OtaLog {
 
   @@index([deviceId, triggeredAt])
   @@map("ota_logs")
+}
+
+// ── Mushroom Cultivation Cycles ──────────────
+model CultivationCycle {
+  id              String    @id @default(uuid())
+  deviceId        String    @map("device_id")
+  device          Device    @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  name            String?   @db.VarChar(120)
+  mushroomType    String    @default("Jamur Tiram") @map("mushroom_type") @db.VarChar(100)
+  strain          String?   @db.VarChar(100)
+  baglogCount     Int?      @map("baglog_count")
+  startedAt       DateTime  @map("started_at")
+  expectedEndedAt DateTime? @map("expected_ended_at")
+  endedAt         DateTime? @map("ended_at")
+  status          String    @default("active") @db.VarChar(20)
+  notes           String?   @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  harvests HarvestRecord[]
+
+  @@index([deviceId, status, startedAt])
+  @@map("cultivation_cycles")
+}
+
+// ── Harvest Records per Cycle ────────────────
+model HarvestRecord {
+  id          String           @id @default(uuid())
+  cycleId     String           @map("cycle_id")
+  cycle       CultivationCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  harvestedAt DateTime         @map("harvested_at")
+  weightKg    Float            @map("weight_kg")
+  pricePerKg  Float?           @map("price_per_kg")
+  grade       String?          @db.VarChar(50)
+  notes       String?          @db.Text
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@index([cycleId, harvestedAt])
+  @@map("harvest_records")
 }

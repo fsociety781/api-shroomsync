@@ -594,6 +594,8 @@ function RealTimeDashboard({ deviceId }) {
 
 ## Rate Limit Handling
 
+Backend default menonaktifkan rate limiter (`RATE_LIMIT_ENABLED=false`) supaya dashboard bisa polling dan mengirim command secara kontinu. Gunakan pola berikut hanya kalau rate limiter sengaja diaktifkan di environment backend.
+
 ### Exponential Backoff Retry
 
 ```javascript

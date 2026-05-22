@@ -5,6 +5,10 @@
 const rateLimit = require('express-rate-limit');
 const config = require('../config');
 
+function isRateLimitDisabled() {
+  return !config.rateLimiting.enabled;
+}
+
 /**
  * Global rate limiter
  * Applies to all requests
@@ -19,8 +23,7 @@ const globalLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in RateLimit-* headers
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/api/health';
+    return isRateLimitDisabled() || req.path === '/api/health';
   },
   keyGenerator: (req) => req.ip,
   handler: (req, res) => {
@@ -38,13 +41,14 @@ const globalLimiter = rateLimit({
  */
 const strictLimiter = rateLimit({
   windowMs: config.rateLimiting.windowMs,
-  max: Math.floor(config.rateLimiting.max / 5), // 5x stricter
+  max: Math.max(1, Math.floor(config.rateLimiting.max / 5)), // 5x stricter
   message: {
     status: 'error',
     message: 'Too many attempts, please try again later',
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: isRateLimitDisabled,
   keyGenerator: (req) => {
     // Rate limit by IP + deviceId combination for device control
     const deviceId = req.params.deviceId || req.body?.deviceId || '';

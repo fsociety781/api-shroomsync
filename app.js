@@ -15,6 +15,7 @@ const deviceRoutes = require('./src/routes/device.routes');
 const controlRoutes = require('./src/routes/control.routes');
 const telemetryRoutes = require('./src/routes/telemetry.routes');
 const otaRoutes = require('./src/routes/ota.routes');
+const cycleRoutes = require('./src/routes/cycle.routes');
 
 // Middleware
 const errorHandler = require('./src/middleware/error-handler');
@@ -60,9 +61,10 @@ app.get('/api/health', (req, res) => {
 
 // ── API Routes (v1) ───────────────────────────
 app.use('/api/v1/devices', deviceRoutes);
-app.use('/api/v1/devices', strictLimiter, controlRoutes); // Stricter limit for control
 app.use('/api/v1/devices', telemetryRoutes);
-app.use('/api/v1/ota', strictLimiter, otaRoutes); // Stricter limit for OTA
+app.use('/api/v1/devices', cycleRoutes);
+app.use('/api/v1/devices', strictLimiter, controlRoutes);
+app.use('/api/v1/ota', strictLimiter, otaRoutes);
 
 // ── 404 Handler ───────────────────────────────
 app.use((req, res) => {

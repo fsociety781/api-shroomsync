@@ -93,6 +93,24 @@ const socketService = {
   },
 
   /**
+   * Emit device online event.
+   */
+  emitDeviceOnline(deviceId) {
+    if (!io) return;
+    io.to(`device:${deviceId}`).emit('device:online', { deviceId, isOnline: true });
+    io.emit('device:online', { deviceId, isOnline: true });
+  },
+
+  /**
+   * Emit device offline event.
+   */
+  emitDeviceOffline(deviceId) {
+    if (!io) return;
+    io.to(`device:${deviceId}`).emit('device:offline', { deviceId, isOnline: false });
+    io.emit('device:offline', { deviceId, isOnline: false });
+  },
+
+  /**
    * Emit OTA progress.
    */
   emitOtaProgress(deviceId, data) {

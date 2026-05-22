@@ -2,7 +2,7 @@
 
 **Versi:** 1.0.0  
 **Base URL:** `http://localhost:3000/api/v1`  
-**Terakhir diperbarui:** 2026-05-14
+**Terakhir diperbarui:** 2026-05-21
 
 ---
 
@@ -14,9 +14,10 @@
 5. [Device Management](#device-management)
 6. [Device Control](#device-control)
 7. [Telemetry Data](#telemetry-data)
-8. [OTA Updates](#ota-updates)
-9. [MQTT Protocol](#mqtt-protocol)
-10. [Contoh Implementasi](#contoh-implementasi)
+8. [Mushroom Cycles & Harvest](#mushroom-cycles--harvest)
+9. [OTA Updates](#ota-updates)
+10. [MQTT Protocol](#mqtt-protocol)
+11. [Contoh Implementasi](#contoh-implementasi)
 
 ---
 
@@ -45,6 +46,7 @@ MQTT_CLIENT_ID="shroomsync-server"
 CORS_ORIGINS="http://localhost:3000,http://localhost:3001,https://dashboard.shroomsync.com"
 
 # Rate Limiting
+RATE_LIMIT_ENABLED=false             # Default false; set true only if limiter is needed
 RATE_LIMIT_WINDOW_MS=900000          # 15 menit (dalam millisecond)
 RATE_LIMIT_MAX_REQUESTS=100          # Max request per window
 
@@ -206,14 +208,18 @@ Semua error mengembalikan response dengan struktur:
 
 ### 🚦 Rate Limit Policy
 
+Rate limiting bersifat opt-in. Default `RATE_LIMIT_ENABLED=false`, supaya frontend bisa polling telemetry dan mengirim command tanpa terkena `429`.
+
+Jika `RATE_LIMIT_ENABLED=true`:
 - **Global Limit:** 100 requests per 15 menit
 - **Control Endpoints:** 20 requests per 15 menit (5x lebih ketat)
 - **OTA Endpoints:** 20 requests per 15 menit (5x lebih ketat)
 - **Health Check:** Tidak dibatasi
+- **Telemetry Routes:** Dipasang sebelum strict limiter, jadi tidak ikut limit control endpoint
 
 ### Rate Limit Headers
 
-Setiap response menyertakan header:
+Saat rate limiter aktif, response menyertakan header:
 
 ```
 RateLimit-Limit: 100           # Max requests dalam window
@@ -433,7 +439,7 @@ DELETE /api/v1/devices/SS-0426-001
 
 ### 🎮 Control Endpoints
 
-Endpoint control mengirimkan perintah ke ESP32 melalui MQTT dan menyimpan konfigurasi ke database.
+Endpoint control mengirimkan perintah ke ESP32 melalui MQTT. Response berisi topic dan payload command yang dikirim; konfigurasi database diperbarui saat device mengirim state balik melalui MQTT.
 
 #### POST /devices/:deviceId/control/mode
 Mengubah mode operasi device.
@@ -459,10 +465,12 @@ Content-Type: application/json
 ```json
 {
   "status": "success",
-  "message": "Control mode updated",
+  "message": "Command sent",
   "data": {
-    "deviceId": "SS-0426-001",
-    "controlMode": 2
+    "topic": "SS-0426-001/cmd/control/mode",
+    "payload": {
+      "mode": 2
+    }
   }
 }
 ```
@@ -493,32 +501,34 @@ POST /api/v1/devices/SS-0426-001/setpoint
 Content-Type: application/json
 
 {
-  "minSuhu": 20,
-  "midSuhu": 28,
-  "minKelembaban": 70,
-  "midKelembaban": 85
+  "MinS": 20,
+  "MidS": 28,
+  "MinK": 70,
+  "MidK": 85
 }
 ```
 
 **Body Parameters:**
 | Field | Type | Range | Deskripsi |
 |-------|------|-------|-----------|
-| `minSuhu` | number | 15-35 | Minimum suhu (°C) |
-| `midSuhu` | number | 15-35 | Target suhu (°C) |
-| `minKelembaban` | number | 40-100 | Minimum kelembaban (%) |
-| `midKelembaban` | number | 40-100 | Target kelembaban (%) |
+| `MinS` | number | 0-60 | Minimum suhu (°C) |
+| `MidS` | number | 0-60 | Target suhu (°C) |
+| `MinK` | number | 0-100 | Minimum kelembaban (%) |
+| `MidK` | number | 0-100 | Target kelembaban (%) |
 
 **Response (200):**
 ```json
 {
   "status": "success",
-  "message": "Setpoint updated successfully",
+  "message": "Command sent",
   "data": {
-    "deviceId": "SS-0426-001",
-    "minSuhu": 20,
-    "midSuhu": 28,
-    "minKelembaban": 70,
-    "midKelembaban": 85
+    "topic": "SS-0426-001/cmd/setpoint/auto",
+    "payload": {
+      "MinS": 20,
+      "MidS": 28,
+      "MinK": 70,
+      "MidK": 85
+    }
   }
 }
 ```
@@ -534,25 +544,28 @@ POST /api/v1/devices/SS-0426-001/timer
 Content-Type: application/json
 
 {
-  "minute": 1,
-  "second": 30
+  "Menit": 1,
+  "Detik": 30
 }
 ```
 
 **Body Parameters:**
 | Field | Type | Range | Deskripsi |
 |-------|------|-------|-----------|
-| `minute` | number | 0-59 | Menit (0-59) |
-| `second` | number | 0-59 | Detik (0-59) |
+| `Menit` | number | 0-59 | Menit |
+| `Detik` | number | 0-59 | Detik |
 
 **Response (200):**
 ```json
 {
   "status": "success",
+  "message": "Command sent",
   "data": {
-    "deviceId": "SS-0426-001",
-    "timerMinute": 1,
-    "timerSecond": 30
+    "topic": "SS-0426-001/cmd/timer/auto",
+    "payload": {
+      "Menit": 1,
+      "Detik": 30
+    }
   }
 }
 ```
@@ -568,64 +581,133 @@ POST /api/v1/devices/SS-0426-001/timer/floor
 Content-Type: application/json
 
 {
-  "minute": 2,
-  "second": 0
+  "FlrMenit": 2,
+  "FlrDetik": 0
 }
 ```
+
+**Body Parameters:**
+| Field | Type | Range | Deskripsi |
+|-------|------|-------|-----------|
+| `FlrMenit` | number | 0-59 | Menit pompa lantai |
+| `FlrDetik` | number | 0-59 | Detik pompa lantai |
 
 **Response (200):**
 ```json
 {
   "status": "success",
+  "message": "Command sent",
   "data": {
-    "deviceId": "SS-0426-001",
-    "floorTimerMinute": 2,
-    "floorTimerSecond": 0
+    "topic": "SS-0426-001/cmd/timer/floor",
+    "payload": {
+      "FlrMenit": 2,
+      "FlrDetik": 0
+    }
   }
 }
 ```
 
 ---
 
-#### POST /devices/:deviceId/schedule/update
+#### POST /devices/:deviceId/schedule
 Mengatur jadwal operasi harian (hingga 3 slot waktu).
 
 **Request:**
 ```http
-POST /api/v1/devices/SS-0426-001/schedule/update
+POST /api/v1/devices/SS-0426-001/schedule
 Content-Type: application/json
 
 {
-  "schedule": [
-    { "hour": 7, "minute": 0 },
-    { "hour": 12, "minute": 30 },
-    { "hour": 18, "minute": 0 }
-  ],
-  "floorSchedule": { "hour": 8, "minute": 0 }
+  "jam1": 7,
+  "menit1": 0,
+  "jam2": 12,
+  "menit2": 30,
+  "jam3": 18,
+  "menit3": 0
 }
 ```
 
 **Body Parameters:**
-- `schedule` (array): 1-3 slot waktu harian
-  - `hour` (number): 0-23
-  - `minute` (number): 0-59
-- `floorSchedule` (object): Jadwal pompa lantai
-  - `hour` (number): 0-23
-  - `minute` (number): 0-59
+| Field | Type | Range | Deskripsi |
+|-------|------|-------|-----------|
+| `jam1`, `jam2`, `jam3` | number | 0-23 | Jam schedule slot 1-3 |
+| `menit1`, `menit2`, `menit3` | number | 0-59 | Menit schedule slot 1-3 |
 
 **Response (200):**
 ```json
 {
   "status": "success",
-  "message": "Schedule updated",
+  "message": "Command sent",
   "data": {
-    "deviceId": "SS-0426-001",
-    "schedules": [
-      { "hour": 7, "minute": 0 },
-      { "hour": 12, "minute": 30 },
-      { "hour": 18, "minute": 0 }
-    ],
-    "floorSchedule": { "hour": 8, "minute": 0 }
+    "topic": "SS-0426-001/cmd/schedule/update",
+    "payload": {
+      "jam1": 7,
+      "menit1": 0,
+      "jam2": 12,
+      "menit2": 30,
+      "jam3": 18,
+      "menit3": 0
+    }
+  }
+}
+```
+
+---
+
+#### POST /devices/:deviceId/schedule/floor
+Mengatur jadwal pompa lantai.
+
+**Request:**
+```http
+POST /api/v1/devices/SS-0426-001/schedule/floor
+Content-Type: application/json
+
+{
+  "FlrJam": 8,
+  "FlrMenit": 0
+}
+```
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Command sent",
+  "data": {
+    "topic": "SS-0426-001/cmd/schedule/floor",
+    "payload": {
+      "FlrJam": 8,
+      "FlrMenit": 0
+    }
+  }
+}
+```
+
+---
+
+#### POST /devices/:deviceId/schedule/mode
+Mengatur mode schedule.
+
+**Request:**
+```http
+POST /api/v1/devices/SS-0426-001/schedule/mode
+Content-Type: application/json
+
+{
+  "mode": 2
+}
+```
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Command sent",
+  "data": {
+    "topic": "SS-0426-001/cmd/schedule/mode",
+    "payload": {
+      "mode": 2
+    }
   }
 }
 ```
@@ -654,10 +736,48 @@ Content-Type: application/json
 ```json
 {
   "status": "success",
+  "message": "Command sent",
   "data": {
-    "deviceId": "SS-0426-001",
-    "actuator": "pump",
-    "state": "on"
+    "topic": "SS-0426-001/cmd/actuator/pump",
+    "payload": {
+      "pump": 1,
+      "on": true
+    }
+  }
+}
+```
+
+---
+
+#### POST /devices/:deviceId/actuator/fan
+Manual override untuk mengontrol fan/floor pump langsung.
+
+**Request:**
+```http
+POST /api/v1/devices/SS-0426-001/actuator/fan
+Content-Type: application/json
+
+{
+  "on": true
+}
+```
+
+**Body Parameters:**
+| Field | Type | Deskripsi |
+|-------|------|-----------|
+| `on` | boolean | `true` = fan/floor pump ON, `false` = OFF |
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Command sent",
+  "data": {
+    "topic": "SS-0426-001/cmd/actuator/fan",
+    "payload": {
+      "fan": 1,
+      "on": true
+    }
   }
 }
 ```
@@ -671,7 +791,7 @@ Content-Type: application/json
 Telemetry dibagi menjadi 2 kategori untuk optimasi:
 
 1. **Sensor Data** — Suhu & kelembaban real-time (ringan, sering diupdate)
-2. **History Data** — Log aksi pompa/fan (berat, less frequent)
+2. **History Data** — Snapshot sistem berisi sensor, mode, dan status aktuator
 
 ---
 
@@ -686,7 +806,9 @@ GET /api/v1/devices/SS-0426-001/telemetry/sensor?limit=100&offset=0
 **Query Parameters:**
 | Parameter | Type | Default | Deskripsi |
 |-----------|------|---------|-----------|
-| `limit` | number | 50 | Jumlah data per request (max 500) |
+| `from` | string | - | Filter mulai dari waktu ISO 8601 |
+| `to` | string | - | Filter sampai waktu ISO 8601 |
+| `limit` | number | 100 | Jumlah data per request (max 1000) |
 | `offset` | number | 0 | Jumlah data yang di-skip |
 
 **Response (200):**
@@ -697,23 +819,24 @@ GET /api/v1/devices/SS-0426-001/telemetry/sensor?limit=100&offset=0
     {
       "id": "uuid-1",
       "deviceId": "SS-0426-001",
-      "suhu": 28.5,
-      "kelembaban": 82.3,
-      "recordedAt": "2026-05-14T10:30:00Z"
+      "temperature": 30.32998,
+      "humidity": 62.83971,
+      "recordedAt": "2026/05/16 14:35:44",
+      "createdAt": "2026-05-16T07:35:44.000Z"
     },
     {
       "id": "uuid-2",
       "deviceId": "SS-0426-001",
-      "suhu": 28.4,
-      "kelembaban": 82.1,
-      "recordedAt": "2026-05-14T10:35:00Z"
+      "temperature": 30.39941,
+      "humidity": 63.02281,
+      "recordedAt": "2026/05/16 14:39:57",
+      "createdAt": "2026-05-16T07:39:57.000Z"
     }
   ],
   "pagination": {
     "total": 1200,
-    "limit": 50,
-    "offset": 0,
-    "hasMore": true
+    "limit": 100,
+    "offset": 0
   }
 }
 ```
@@ -735,9 +858,10 @@ GET /api/v1/devices/SS-0426-001/telemetry/sensor/latest
   "data": {
     "id": "uuid-1",
     "deviceId": "SS-0426-001",
-    "suhu": 28.5,
-    "kelembaban": 82.3,
-    "recordedAt": "2026-05-14T10:30:00Z"
+    "temperature": 30.32998,
+    "humidity": 62.83971,
+    "recordedAt": "2026/05/16 14:35:44",
+    "createdAt": "2026-05-16T07:35:44.000Z"
   }
 }
 ```
@@ -750,7 +874,7 @@ GET /api/v1/devices/SS-0426-001/telemetry/sensor/latest
 ---
 
 #### GET /devices/:deviceId/telemetry/history
-Mendapatkan history aksi sistem (pompa, fan, mode changes).
+Mendapatkan history snapshot sistem (sensor, mode, dan status pompa).
 
 **Request:**
 ```http
@@ -765,50 +889,38 @@ GET /api/v1/devices/SS-0426-001/telemetry/history?limit=50&offset=0
     {
       "id": "uuid-history-1",
       "deviceId": "SS-0426-001",
-      "action": "PUMP_ON",
-      "details": {
-        "reason": "Auto mode - humidity below setpoint",
-        "suhu": 28.5,
-        "kelembaban": 72.0
-      },
-      "recordedAt": "2026-05-14T10:30:00Z"
+      "temperature": 30.39941,
+      "humidity": 63.02281,
+      "mode": "AUTO",
+      "pumpStatus": "OFF",
+      "floorPumpStatus": "OFF",
+      "recordedAt": "2026/05/16 14:39:57",
+      "createdAt": "2026-05-16T07:39:57.000Z"
     },
     {
       "id": "uuid-history-2",
       "deviceId": "SS-0426-001",
-      "action": "MODE_CHANGED",
-      "details": {
-        "fromMode": 1,
-        "toMode": 2,
-        "changedBy": "api"
-      },
-      "recordedAt": "2026-05-14T10:25:00Z"
+      "temperature": 30.1,
+      "humidity": 62.5,
+      "mode": "MANUAL",
+      "pumpStatus": "ON",
+      "floorPumpStatus": "OFF",
+      "recordedAt": "2026/05/16 14:34:57",
+      "createdAt": "2026-05-16T07:34:57.000Z"
     }
   ],
   "pagination": {
     "total": 450,
     "limit": 50,
-    "offset": 0,
-    "hasMore": true
+    "offset": 0
   }
 }
 ```
 
-**Action Types:**
-| Action | Deskripsi |
-|--------|-----------|
-| `PUMP_ON` | Pompa menyala |
-| `PUMP_OFF` | Pompa mati |
-| `FAN_ON` | Fan menyala |
-| `FAN_OFF` | Fan mati |
-| `MODE_CHANGED` | Mode operasi berubah |
-| `SETPOINT_UPDATED` | Setpoint diubah |
-| `SCHEDULE_UPDATED` | Jadwal diubah |
-
 ---
 
 #### GET /devices/:deviceId/telemetry/history/latest
-Mendapatkan aksi sistem terbaru.
+Mendapatkan snapshot sistem terbaru.
 
 **Request:**
 ```http
@@ -822,11 +934,304 @@ GET /api/v1/devices/SS-0426-001/telemetry/history/latest
   "data": {
     "id": "uuid-history-1",
     "deviceId": "SS-0426-001",
-    "action": "PUMP_ON",
-    "details": {
-      "reason": "Auto mode - humidity below setpoint"
+    "temperature": 30.39941,
+    "humidity": 63.02281,
+    "mode": "AUTO",
+    "pumpStatus": "OFF",
+    "floorPumpStatus": "OFF",
+    "recordedAt": "2026/05/16 14:39:57",
+    "createdAt": "2026-05-16T07:39:57.000Z"
+  }
+}
+```
+
+---
+
+## Mushroom Cycles & Harvest
+
+Fitur ini dipakai untuk mencatat satu periode budidaya jamur per device/kumbung dan semua panen di dalam siklus tersebut. Untuk jamur tiram, satu siklus biasanya berjalan 3-4 bulan dan harvest bisa dicatat setiap hari.
+
+Status siklus yang didukung:
+- `active` — siklus sedang berjalan
+- `completed` — siklus selesai
+- `cancelled` — siklus dibatalkan
+
+---
+
+#### GET /devices/:deviceId/cycles
+Melihat daftar siklus budidaya pada device.
+
+**Request:**
+```http
+GET /api/v1/devices/SS-0426-001/cycles?status=active&limit=20&offset=0
+```
+
+**Query Parameters:**
+| Parameter | Type | Default | Deskripsi |
+|-----------|------|---------|-----------|
+| `status` | string | - | Filter `active`, `completed`, atau `cancelled` |
+| `from` | date | - | Filter `startedAt` mulai tanggal tertentu |
+| `to` | date | - | Filter `startedAt` sampai tanggal tertentu |
+| `limit` | number | 100 | Jumlah data per request (max 1000) |
+| `offset` | number | 0 | Jumlah data yang di-skip |
+
+---
+
+#### POST /devices/:deviceId/cycles
+Membuat atau memulai siklus budidaya baru.
+
+**Request:**
+```http
+POST /api/v1/devices/SS-0426-001/cycles
+Content-Type: application/json
+
+{
+  "name": "Siklus Mei 2026 - Kumbung A",
+  "mushroomType": "Jamur Tiram",
+  "strain": "Tiram Putih",
+  "baglogCount": 1200,
+  "startedAt": "2026-05-21",
+  "expectedEndedAt": "2026-09-21",
+  "notes": "Batch awal musim kemarau"
+}
+```
+
+**Body Parameters:**
+| Field | Type | Required | Deskripsi |
+|-------|------|----------|-----------|
+| `name` | string | ❌ | Nama siklus |
+| `mushroomType` | string | ❌ | Default `Jamur Tiram` |
+| `strain` | string | ❌ | Varian/strain jamur |
+| `baglogCount` | number | ❌ | Jumlah baglog awal |
+| `startedAt` | date | ❌ | Tanggal mulai, default waktu request |
+| `expectedEndedAt` | date | ❌ | Estimasi selesai siklus |
+| `status` | string | ❌ | Default `active` |
+| `notes` | string | ❌ | Catatan siklus |
+
+**Response (201):**
+```json
+{
+  "status": "success",
+  "message": "Cultivation cycle created successfully",
+  "data": {
+    "id": "cycle-uuid",
+    "deviceId": "SS-0426-001",
+    "name": "Siklus Mei 2026 - Kumbung A",
+    "mushroomType": "Jamur Tiram",
+    "strain": "Tiram Putih",
+    "baglogCount": 1200,
+    "startedAt": "2026-05-21T00:00:00.000Z",
+    "expectedEndedAt": "2026-09-21T00:00:00.000Z",
+    "endedAt": null,
+    "status": "active",
+    "_count": {
+      "harvests": 0
+    }
+  }
+}
+```
+
+---
+
+#### GET /devices/:deviceId/cycles/:cycleId
+Melihat detail satu siklus.
+
+**Request:**
+```http
+GET /api/v1/devices/SS-0426-001/cycles/cycle-uuid
+```
+
+---
+
+#### PATCH /devices/:deviceId/cycles/:cycleId
+Update metadata atau status siklus.
+
+**Request:**
+```http
+PATCH /api/v1/devices/SS-0426-001/cycles/cycle-uuid
+Content-Type: application/json
+
+{
+  "baglogCount": 1180,
+  "notes": "20 baglog rusak dikeluarkan"
+}
+```
+
+---
+
+#### POST /devices/:deviceId/cycles/:cycleId/complete
+Menandai siklus selesai.
+
+**Request:**
+```http
+POST /api/v1/devices/SS-0426-001/cycles/cycle-uuid/complete
+Content-Type: application/json
+
+{
+  "endedAt": "2026-09-15",
+  "notes": "Siklus selesai, kumbung dibersihkan"
+}
+```
+
+---
+
+#### DELETE /devices/:deviceId/cycles/:cycleId
+Menghapus siklus beserta semua catatan harvest di dalamnya.
+
+**Request:**
+```http
+DELETE /api/v1/devices/SS-0426-001/cycles/cycle-uuid
+```
+
+---
+
+#### GET /devices/:deviceId/cycles/:cycleId/harvests
+Melihat daftar catatan panen di dalam siklus.
+
+**Request:**
+```http
+GET /api/v1/devices/SS-0426-001/cycles/cycle-uuid/harvests?from=2026-06-01&to=2026-06-30
+```
+
+**Query Parameters:**
+| Parameter | Type | Default | Deskripsi |
+|-----------|------|---------|-----------|
+| `from` | date | - | Filter `harvestedAt` mulai tanggal tertentu |
+| `to` | date | - | Filter `harvestedAt` sampai tanggal tertentu |
+| `limit` | number | 100 | Jumlah data per request (max 1000) |
+| `offset` | number | 0 | Jumlah data yang di-skip |
+
+---
+
+#### POST /devices/:deviceId/cycles/:cycleId/harvests
+Mencatat panen. Endpoint ini bisa dipanggil setiap hari, atau lebih dari sekali per hari jika panen dilakukan beberapa batch.
+
+**Request:**
+```http
+POST /api/v1/devices/SS-0426-001/cycles/cycle-uuid/harvests
+Content-Type: application/json
+
+{
+  "harvestedAt": "2026-06-10T08:30:00.000Z",
+  "weightKg": 18.75,
+  "pricePerKg": 18000,
+  "grade": "A",
+  "notes": "Panen pagi"
+}
+```
+
+**Body Parameters:**
+| Field | Type | Required | Deskripsi |
+|-------|------|----------|-----------|
+| `harvestedAt` | date | ❌ | Waktu panen, default waktu request |
+| `weightKg` | number | ✅ | Berat panen dalam kg |
+| `pricePerKg` | number | ❌ | Harga per kg, dipakai untuk summary revenue |
+| `grade` | string | ❌ | Grade/kualitas panen |
+| `notes` | string | ❌ | Catatan panen |
+
+**Response (201):**
+```json
+{
+  "status": "success",
+  "message": "Harvest recorded successfully",
+  "data": {
+    "id": "harvest-uuid",
+    "cycleId": "cycle-uuid",
+    "harvestedAt": "2026-06-10T08:30:00.000Z",
+    "weightKg": 18.75,
+    "pricePerKg": 18000,
+    "grade": "A",
+    "notes": "Panen pagi"
+  }
+}
+```
+
+---
+
+#### PATCH /devices/:deviceId/cycles/:cycleId/harvests/:harvestId
+Update catatan panen.
+
+**Request:**
+```http
+PATCH /api/v1/devices/SS-0426-001/cycles/cycle-uuid/harvests/harvest-uuid
+Content-Type: application/json
+
+{
+  "weightKg": 19.1,
+  "notes": "Revisi setelah timbang ulang"
+}
+```
+
+---
+
+#### DELETE /devices/:deviceId/cycles/:cycleId/harvests/:harvestId
+Menghapus catatan panen.
+
+**Request:**
+```http
+DELETE /api/v1/devices/SS-0426-001/cycles/cycle-uuid/harvests/harvest-uuid
+```
+
+---
+
+#### GET /devices/:deviceId/cycles/:cycleId/summary
+Melihat resume dan analisis hasil panen per siklus.
+
+**Request:**
+```http
+GET /api/v1/devices/SS-0426-001/cycles/cycle-uuid/summary
+```
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "data": {
+    "cycle": {
+      "id": "cycle-uuid",
+      "deviceId": "SS-0426-001",
+      "name": "Siklus Mei 2026 - Kumbung A",
+      "mushroomType": "Jamur Tiram",
+      "baglogCount": 1200,
+      "startedAt": "2026-05-21T00:00:00.000Z",
+      "status": "active",
+      "_count": {
+        "harvests": 2
+      }
     },
-    "recordedAt": "2026-05-14T10:30:00Z"
+    "summary": {
+      "totalHarvests": 2,
+      "totalWeightKg": 36.25,
+      "totalRevenue": 652500,
+      "cycleAgeDays": 21,
+      "harvestDays": 2,
+      "averageWeightPerHarvestKg": 18.125,
+      "averageWeightPerCycleDayKg": 1.726,
+      "averageWeightPerHarvestDayKg": 18.125,
+      "yieldPerBaglogKg": 0.03,
+      "firstHarvestAt": "2026-06-10T08:30:00.000Z",
+      "latestHarvestAt": "2026-06-11T08:15:00.000Z",
+      "peakHarvestDay": {
+        "date": "2026-06-10",
+        "harvestCount": 1,
+        "totalWeightKg": 18.75,
+        "totalRevenue": 337500
+      }
+    },
+    "dailyBreakdown": [
+      {
+        "date": "2026-06-10",
+        "harvestCount": 1,
+        "totalWeightKg": 18.75,
+        "totalRevenue": 337500
+      },
+      {
+        "date": "2026-06-11",
+        "harvestCount": 1,
+        "totalWeightKg": 17.5,
+        "totalRevenue": 315000
+      }
+    ]
   }
 }
 ```
@@ -846,30 +1251,77 @@ POST /api/v1/ota/trigger/SS-0426-001
 Content-Type: application/json
 
 {
-  "firmwareUrl": "https://storage.shroomsync.com/firmware/v2.2.0.bin",
-  "firmwareVersion": "2.2.0",
-  "changelog": "Fix: WiFi stability issue"
+  "action": "update",
+  "hardware_version": "1.0",
+  "firmware_version": "1.1.0",
+  "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
+  "checksum_sha256": "optional-sha256",
+  "force": false
 }
 ```
 
 **Body Parameters:**
 | Field | Type | Required | Deskripsi |
 |-------|------|----------|-----------|
-| `firmwareUrl` | string | ✅ | URL download firmware (.bin file) |
-| `firmwareVersion` | string | ✅ | Versi firmware (format: X.Y.Z) |
-| `changelog` | string | ❌ | Change log / release notes |
+| `action` | string | ❌ | Aksi OTA, default `update` |
+| `hardware_version` | string | ✅ | Versi hardware target |
+| `firmware_version` | string | ✅ | Versi firmware target |
+| `url` | string | ✅ | URL download firmware (.bin file) |
+| `checksum_sha256` | string | ❌ | SHA-256 firmware untuk verifikasi |
+| `force` | boolean | ❌ | Paksa update walau versi sama, default `false` |
 
 **Response (200):**
 ```json
 {
   "status": "success",
-  "message": "OTA update triggered",
+  "message": "OTA trigger sent to SS-0426-001",
   "data": {
-    "deviceId": "SS-0426-001",
-    "firmwareVersion": "2.2.0",
-    "status": "pending",
-    "triggeredAt": "2026-05-14T10:30:00Z",
-    "estimatedDuration": "120 seconds"
+    "topic": "shroomsync/ota/SS-0426-001/trigger",
+    "payload": {
+      "action": "update",
+      "hardware_version": "1.0",
+      "firmware_version": "1.1.0",
+      "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
+      "checksum_sha256": "optional-sha256",
+      "force": false
+    }
+  }
+}
+```
+
+---
+
+#### POST /ota/legacy-trigger/:deviceId
+Memicu update firmware untuk device legacy.
+
+**Request:**
+```http
+POST /api/v1/ota/legacy-trigger/SS-0426-001
+Content-Type: application/json
+
+{
+  "action": "update",
+  "hardware_version": "1.0",
+  "firmware_version": "1.1.0",
+  "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
+  "force": false
+}
+```
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Legacy OTA trigger sent to SS-0426-001",
+  "data": {
+    "topic": "SS-0426-001/legacy/ota/trigger",
+    "payload": {
+      "action": "update",
+      "hardware_version": "1.0",
+      "firmware_version": "1.1.0",
+      "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
+      "force": false
+    }
   }
 }
 ```
@@ -885,8 +1337,11 @@ POST /api/v1/ota/broadcast
 Content-Type: application/json
 
 {
-  "firmwareUrl": "https://storage.shroomsync.com/firmware/v2.2.0.bin",
-  "firmwareVersion": "2.2.0"
+  "action": "update",
+  "hardware_version": "1.0",
+  "firmware_version": "1.1.0",
+  "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
+  "force": false
 }
 ```
 
@@ -894,12 +1349,16 @@ Content-Type: application/json
 ```json
 {
   "status": "success",
-  "message": "OTA broadcast triggered to 5 devices",
+  "message": "OTA broadcast sent to all devices",
   "data": {
-    "totalDevices": 5,
-    "successCount": 5,
-    "failedDevices": [],
-    "triggeredAt": "2026-05-14T10:30:00Z"
+    "topic": "shroomsync/ota/broadcast",
+    "payload": {
+      "action": "update",
+      "hardware_version": "1.0",
+      "firmware_version": "1.1.0",
+      "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
+      "force": false
+    }
   }
 }
 ```
@@ -922,21 +1381,14 @@ GET /api/v1/ota/logs/SS-0426-001?limit=20&offset=0
     {
       "id": "uuid-log-1",
       "deviceId": "SS-0426-001",
-      "fromVersion": "2.1.0",
-      "toVersion": "2.2.0",
-      "status": "success",
-      "errorMessage": null,
-      "startedAt": "2026-05-14T10:30:00Z",
-      "completedAt": "2026-05-14T10:32:15Z",
-      "durationMs": 135000
+      "firmwareVersion": "1.1.0",
+      "firmwareUrl": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
+      "progress": 100,
+      "status": "completed",
+      "triggeredAt": "2026-05-16T07:30:00.000Z",
+      "completedAt": "2026-05-16T07:32:15.000Z"
     }
-  ],
-  "pagination": {
-    "total": 3,
-    "limit": 20,
-    "offset": 0,
-    "hasMore": false
-  }
+  ]
 }
 ```
 
@@ -954,30 +1406,151 @@ Topik yang di-subscribe server:
 ```
 {deviceId}/telemetry/sensor
 {deviceId}/telemetry/history
-{deviceId}/state/#
+{deviceId}/telemetry/heartbeat
+{deviceId}/state/actuator
+{deviceId}/state/control/mode
+{deviceId}/state/setpoint/auto
+{deviceId}/state/timer/auto
+{deviceId}/state/timer/floor
+{deviceId}/state/schedule/mode
+{deviceId}/state/schedule/slot/1
+{deviceId}/state/schedule/slot/2
+{deviceId}/state/schedule/slot/3
+{deviceId}/state/schedule/floor
+{deviceId}/legacy/ota/status
 shroomsync/ota/{deviceId}/status
 ```
 
-**Contoh Payload — Sensor Data:**
+Server hanya memproses topic ShroomSync yang dikenal. Topic asing seperti `lock/state` diabaikan sebelum JSON parsing.
+
+**Format Envelope dari ESP32:**
 ```json
 {
-  "clientId": "esp32-SS-0426-001",
+  "device_id": "SS-0426-001",
+  "seq": 47,
+  "uptime_ms": 308527,
   "data": {
-    "suhu": 28.5,
-    "kelembaban": 82.3
-  }
+    "...": "payload efektif sesuai topic"
+  },
+  "clientId": "SS-ESP32-DB4EB580"
 }
 ```
 
-**Contoh Payload — OTA Status:**
+Backend membaca field efektif dari `data`. `device_id` harus sama dengan prefix topic `{deviceId}` jika dikirim.
+
+**Contoh Payload — Sensor Data:**
+```text
+Topic: SS-0426-001/telemetry/sensor
+QoS: 0
+```
 ```json
 {
-  "clientId": "esp32-SS-0426-001",
+  "device_id": "SS-0426-001",
+  "seq": 47,
+  "uptime_ms": 308527,
   "data": {
-    "status": "success",
-    "version": "2.2.0",
-    "message": "Update completed successfully"
-  }
+    "suhu": 30.32998,
+    "kelembaban": 62.83971,
+    "waktu": "2026/05/16 14:35:44"
+  },
+  "clientId": "SS-ESP32-DB4EB580"
+}
+```
+
+**Contoh Payload — History Data:**
+```text
+Topic: SS-0426-001/telemetry/history
+QoS: 0
+```
+```json
+{
+  "device_id": "SS-0426-001",
+  "seq": 58,
+  "uptime_ms": 561593,
+  "data": {
+    "suhu": 30.39941,
+    "kelembaban": 63.02281,
+    "mode": "AUTO",
+    "waktu": "2026/05/16 14:39:57",
+    "floorPump": "OFF",
+    "pump": "OFF"
+  },
+  "clientId": "SS-ESP32-DB4EB580"
+}
+```
+
+**Contoh Payload — Heartbeat:**
+```text
+Topic: SS-0426-001/telemetry/heartbeat
+QoS: 0
+```
+```json
+{
+  "device_id": "SS-0426-001",
+  "seq": 59,
+  "uptime_ms": 595550,
+  "data": {
+    "status": "online",
+    "uptime_ms": 595549,
+    "rssi_dbm": -64,
+    "mode": "AUTO",
+    "sensor_valid": true,
+    "waktu": "2026/05/16 14:40:31",
+    "firmware_version": "1.1.0",
+    "hardware_version": "1.0"
+  },
+  "clientId": "SS-ESP32-DB4EB580"
+}
+```
+
+**Contoh Payload — State Setpoint:**
+```text
+Topic: SS-0426-001/state/setpoint/auto
+```
+```json
+{
+  "device_id": "SS-0426-001",
+  "seq": 60,
+  "uptime_ms": 601000,
+  "data": {
+    "MinS": 20,
+    "MidS": 28,
+    "MinK": 70,
+    "MidK": 85
+  },
+  "clientId": "SS-ESP32-DB4EB580"
+}
+```
+
+**Field State yang Didukung:**
+| Topic | Field `data` |
+|-------|--------------|
+| `{deviceId}/state/actuator` | Free-form status aktuator, diteruskan ke Socket.IO |
+| `{deviceId}/state/control/mode` | `mode` |
+| `{deviceId}/state/setpoint/auto` | `MinS`, `MidS`, `MinK`, `MidK` |
+| `{deviceId}/state/timer/auto` | `Menit`, `Detik` |
+| `{deviceId}/state/timer/floor` | `FlrMenit`, `FlrDetik` |
+| `{deviceId}/state/schedule/mode` | `smode` |
+| `{deviceId}/state/schedule/slot/1` | `Jam1`, `Menit1` |
+| `{deviceId}/state/schedule/slot/2` | `Jam2`, `Menit2` |
+| `{deviceId}/state/schedule/slot/3` | `Jam3`, `Menit3` |
+| `{deviceId}/state/schedule/floor` | `FlrJam`, `FlrMenit` |
+
+**Contoh Payload — OTA Status:**
+```text
+Topic: shroomsync/ota/SS-0426-001/status
+```
+```json
+{
+  "device_id": "SS-0426-001",
+  "seq": 61,
+  "uptime_ms": 700000,
+  "data": {
+    "status": "completed",
+    "progress": 100,
+    "firmware_version": "1.1.0"
+  },
+  "clientId": "SS-ESP32-DB4EB580"
 }
 ```
 
@@ -985,63 +1558,121 @@ shroomsync/ota/{deviceId}/status
 
 #### Server Publish (Kirim ke ESP32)
 
-**1. Ubah Mode Control:**
+Semua command MQTT dari server dibungkus otomatis dalam envelope berikut:
+```json
+{
+  "data": {
+    "...": "payload command"
+  },
+  "clientId": "shroomsync-server"
+}
 ```
+
+**1. Ubah Mode Control:**
+```text
 Topic: {deviceId}/cmd/control/mode
-Payload: { "mode": 2 }
+Data:
+{
+  "mode": 2
+}
 ```
 
 **2. Ubah Setpoint (Auto Mode):**
-```
+```text
 Topic: {deviceId}/cmd/setpoint/auto
-Payload: {
-  "minS": 20,
-  "midS": 28,
-  "minK": 70,
-  "midK": 85
+Data:
+{
+  "MinS": 20,
+  "MidS": 28,
+  "MinK": 70,
+  "MidK": 85
 }
 ```
 
 **3. Ubah Timer Spray:**
-```
+```text
 Topic: {deviceId}/cmd/timer/auto
-Payload: {
-  "minute": 1,
-  "second": 30
+Data:
+{
+  "Menit": 1,
+  "Detik": 30
 }
 ```
 
 **4. Ubah Timer Lantai:**
-```
+```text
 Topic: {deviceId}/cmd/timer/floor
-Payload: {
-  "minute": 2,
-  "second": 0
+Data:
+{
+  "FlrMenit": 2,
+  "FlrDetik": 0
 }
 ```
 
 **5. Update Jadwal:**
-```
+```text
 Topic: {deviceId}/cmd/schedule/update
-Payload: {
-  "jam1": 7, "menit1": 0,
-  "jam2": 12, "menit2": 30,
-  "jam3": 18, "menit3": 0
+Data:
+{
+  "jam1": 7,
+  "menit1": 0,
+  "jam2": 12,
+  "menit2": 30,
+  "jam3": 18,
+  "menit3": 0
 }
 ```
 
-**6. Manual Control Pompa:**
-```
-Topic: {deviceId}/cmd/actuator/pump
-Payload: { "on": true }
+**6. Update Jadwal Lantai:**
+```text
+Topic: {deviceId}/cmd/schedule/floor
+Data:
+{
+  "FlrJam": 6,
+  "FlrMenit": 30
+}
 ```
 
-**7. Trigger OTA Update:**
+**7. Ubah Mode Jadwal:**
+```text
+Topic: {deviceId}/cmd/schedule/mode
+Data:
+{
+  "mode": 2
+}
 ```
+
+**8. Manual Control Pompa:**
+```text
+Topic: {deviceId}/cmd/actuator/pump
+Data:
+{
+  "pump": 1,
+  "on": true
+}
+```
+
+**9. Manual Control Fan/Floor Pump:**
+```text
+Topic: {deviceId}/cmd/actuator/fan
+Data:
+{
+  "fan": 1,
+  "on": true
+}
+```
+
+**10. Trigger OTA Update:**
+```text
 Topic: shroomsync/ota/{deviceId}/trigger
-Payload: {
-  "url": "https://storage.shroomsync.com/firmware/v2.2.0.bin",
-  "version": "2.2.0"
+Data:
+{
+  "action": "update",
+  "hardware_version": "1.0",
+  "firmware_version": "1.1.0",
+  "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
+  "checksum_sha256": "optional-sha256",
+  "force": false
 }
 ```
 
