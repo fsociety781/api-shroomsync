@@ -14,18 +14,21 @@ datasource db {
 
 // ── Device Registry ──────────────────────────
 model Device {
-  id              String    @id @default(uuid())
-  deviceId        String    @unique @map("device_id")
-  name            String?   @db.VarChar(100)
-  hardwareVersion String    @default("1.0") @map("hardware_version") @db.VarChar(20)
-  firmwareVersion String    @default("1.0.0") @map("firmware_version") @db.VarChar(20)
-  isOnline        Boolean   @default(false) @map("is_online")
-  rssiDbm         Int?      @map("rssi_dbm")
-  uptimeMs        Int?      @map("uptime_ms")
-  sensorValid     Boolean?  @default(true) @map("sensor_valid")
-  lastSeenAt      DateTime? @map("last_seen_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  deviceId          String    @unique @map("device_id")
+  name              String?   @db.VarChar(100)
+  hardwareVersion   String    @default("1.0") @map("hardware_version") @db.VarChar(20)
+  firmwareVersion   String    @default("1.0.0") @map("firmware_version") @db.VarChar(20)
+  isOnline          Boolean   @default(false) @map("is_online")
+  rssiDbm           Int?      @map("rssi_dbm")
+  uptimeMs          Int?      @map("uptime_ms")
+  sensorValid       Boolean?  @default(true) @map("sensor_valid")
+  pumpStatus        String    @default("OFF") @map("pump_status") @db.VarChar(10)
+  floorPumpStatus   String    @default("OFF") @map("floor_pump_status") @db.VarChar(10)
+  actuatorUpdatedAt DateTime? @map("actuator_updated_at")
+  lastSeenAt        DateTime? @map("last_seen_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   config            DeviceConfig?
   sensorTelemetry   SensorTelemetry[]

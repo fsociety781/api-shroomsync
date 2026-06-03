@@ -169,6 +169,29 @@ class DeviceService {
   }
 
   /**
+   * Store the latest actuator state on the device record.
+   */
+  async updateActuatorState(deviceId, state) {
+    await this.ensureDevice(deviceId);
+
+    const data = {};
+    if (state.pumpStatus !== undefined) data.pumpStatus = state.pumpStatus;
+    if (state.floorPumpStatus !== undefined) data.floorPumpStatus = state.floorPumpStatus;
+
+    if (Object.keys(data).length === 0) {
+      return this.getDevice(deviceId);
+    }
+
+    data.actuatorUpdatedAt = new Date();
+
+    return prisma.device.update({
+      where: { deviceId },
+      data,
+      include: { config: true },
+    });
+  }
+
+  /**
    * Helper to generate a {deviceId}.json file in storage/devices.
    */
   async _generateDeviceJsonFile(device) {

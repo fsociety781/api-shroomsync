@@ -5,6 +5,7 @@
 // ============================================
 
 const mqttService = require('../services/mqtt.service');
+const deviceService = require('../services/device.service');
 const { buildTopics } = require('../constants/mqtt-topics');
 const {
   controlModeSchema,
@@ -22,7 +23,7 @@ const ApiResponse = require('../utils/api-response');
 /**
  * Helper: publish validated command to a device.
  */
-function sendCommand(res, deviceId, topicKey, payload) {
+async function sendCommand(res, deviceId, topicKey, payload, afterPublish = undefined) {
   const topics = buildTopics(deviceId);
   const topic = topics[topicKey];
 
@@ -36,7 +37,21 @@ function sendCommand(res, deviceId, topicKey, payload) {
     return ApiResponse.error(res, 'MQTT broker not connected', 503);
   }
 
-  ApiResponse.success(res, { topic, payload }, 'Command sent');
+  const result = afterPublish ? await afterPublish() : undefined;
+
+  ApiResponse.success(
+    res,
+    {
+      topic,
+      payload,
+      ...(result !== undefined && { device: result }),
+    },
+    'Command sent'
+  );
+}
+
+function actuatorStatus(on) {
+  return on ? 'ON' : 'OFF';
 }
 
 const controlController = {
@@ -109,7 +124,15 @@ const controlController = {
    */
   controlPump: asyncHandler((req, res) => {
     const data = actuatorSchema.parse(req.body);
-    sendCommand(res, req.params.deviceId, 'cmdPump', { pump: data.on ? 1 : 0, on: data.on });
+    const status = actuatorStatus(data.on);
+
+    return sendCommand(
+      res,
+      req.params.deviceId,
+      'cmdPump',
+      { pump: data.on ? 1 : 0, on: data.on },
+      () => deviceService.updateActuatorState(req.params.deviceId, { pumpStatus: status })
+    );
   }),
 
   /**
@@ -118,7 +141,15 @@ const controlController = {
    */
   controlFan: asyncHandler((req, res) => {
     const data = actuatorSchema.parse(req.body);
-    sendCommand(res, req.params.deviceId, 'cmdFan', { fan: data.on ? 1 : 0, on: data.on });
+    const status = actuatorStatus(data.on);
+
+    return sendCommand(
+      res,
+      req.params.deviceId,
+      'cmdFan',
+      { fan: data.on ? 1 : 0, on: data.on },
+      () => deviceService.updateActuatorState(req.params.deviceId, { floorPumpStatus: status })
+    );
   }),
 };
 

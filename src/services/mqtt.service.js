@@ -33,6 +33,34 @@ const STANDARD_TOPIC_ROUTES = new Set([
   'legacy/ota/status',
 ]);
 
+function normalizeActuatorStatus(value) {
+  if (value == null) return undefined;
+
+  if (typeof value === 'boolean') {
+    return value ? 'ON' : 'OFF';
+  }
+
+  if (typeof value === 'number') {
+    return value === 0 ? 'OFF' : 'ON';
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toUpperCase();
+    if (['1', 'ON', 'TRUE', 'ACTIVE', 'HIGH'].includes(normalized)) return 'ON';
+    if (['0', 'OFF', 'FALSE', 'INACTIVE', 'LOW'].includes(normalized)) return 'OFF';
+  }
+
+  return undefined;
+}
+
+function readActuatorStatus(data, keys) {
+  for (const key of keys) {
+    const status = normalizeActuatorStatus(data[key]);
+    if (status !== undefined) return status;
+  }
+  return undefined;
+}
+
 const mqttService = {
   /**
    * Connect to the MQTT broker and set up subscriptions.
@@ -404,6 +432,25 @@ const mqttService = {
   // These fire when the ESP32 reports its current config state.
 
   async _handleStateActuator(deviceId, data) {
+    const pumpStatus = readActuatorStatus(data, ['pumpStatus', 'pump_status', 'pump']);
+    const floorPumpStatus = readActuatorStatus(data, [
+      'floorPumpStatus',
+      'floor_pump_status',
+      'floorPump',
+      'floor_pump',
+      'fanStatus',
+      'fan_status',
+      'fan',
+    ]);
+    const update = {};
+
+    if (pumpStatus !== undefined) update.pumpStatus = pumpStatus;
+    if (floorPumpStatus !== undefined) update.floorPumpStatus = floorPumpStatus;
+
+    if (Object.keys(update).length > 0) {
+      await deviceService.updateActuatorState(deviceId, update);
+    }
+
     socketService.emitDeviceState(deviceId, 'actuator', data);
   },
 
