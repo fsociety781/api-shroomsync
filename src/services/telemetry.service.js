@@ -64,7 +64,7 @@ class TelemetryService {
   /**
    * Query sensor telemetry with pagination and optional time range.
    */
-  async querySensor(deviceId, { from, to, limit = 100, offset = 0 }) {
+  async querySensor(deviceId, { from, to, offset = 0 }) {
     const where = { deviceId };
 
     if (from || to) {
@@ -77,19 +77,18 @@ class TelemetryService {
       prisma.sensorTelemetry.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
+        ...(offset > 0 && { skip: offset }),
       }),
       prisma.sensorTelemetry.count({ where }),
     ]);
 
-    return { records, total, limit, offset };
+    return { records, total, offset };
   }
 
   /**
    * Query history telemetry with pagination and optional time range.
    */
-  async queryHistory(deviceId, { from, to, limit = 100, offset = 0 }) {
+  async queryHistory(deviceId, { from, to, offset = 0 }) {
     const where = { deviceId };
 
     if (from || to) {
@@ -102,13 +101,12 @@ class TelemetryService {
       prisma.historyTelemetry.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
+        ...(offset > 0 && { skip: offset }),
       }),
       prisma.historyTelemetry.count({ where }),
     ]);
 
-    return { records, total, limit, offset };
+    return { records, total, offset };
   }
 
   /**

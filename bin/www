@@ -34,17 +34,21 @@ telemetryService.startRetentionJob();
 deviceStatusService.startTimeoutJob();
 
 // ── Start Listening ───────────────────────────
-const PORT = config.port;
+const PORT = config.port || 3000;
+const HOST = '0.0.0.0';
 server.listen(PORT, () => {
-  console.log('');
+   console.log('');
   console.log('╔══════════════════════════════════════════════╗');
   console.log('║       🍄 ShroomSync Backend Server 🍄        ║');
   console.log('╠══════════════════════════════════════════════╣');
-  console.log(`║  HTTP API:    http://localhost:${PORT}           ║`);
-  console.log(`║  Socket.IO:   ws://localhost:${PORT}             ║`);
+  console.log(`║  HTTP API:    http://${HOST}:${PORT}             ║`);
+  console.log(`║  Socket.IO:   ws://${HOST}:${PORT}               ║`);
   console.log(`║  MQTT Broker: ${config.mqtt.brokerUrl.padEnd(27)}   ║`);
   console.log(`║  Environment: ${config.nodeEnv.padEnd(27)}   ║`);
   console.log('╚══════════════════════════════════════════════╝');
+  console.log('');
+  console.log('IMPORTANT: Untuk akses dari APK/HP, gunakan IP laptop/server.');
+  console.log(`Contoh: http://IP_LAPTOP:${PORT}/api/health`);
   console.log('');
   console.log('API Endpoints:');
   console.log('  GET    /api/health');

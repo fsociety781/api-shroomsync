@@ -23,6 +23,11 @@ const nullableText = (max) => z.preprocess(
   z.string().trim().min(1).max(max).nullable().optional()
 );
 
+const offsetValue = z.preprocess(
+  (value) => (value === '' || value == null ? undefined : value),
+  z.coerce.number().int().min(0).optional().default(0)
+);
+
 // ── Device ────────────────────────────────────
 const createDeviceSchema = z.object({
   deviceId: z.string().min(1, 'device_id is required').max(50),
@@ -98,8 +103,7 @@ const otaTriggerSchema = z.object({
 const telemetryQuerySchema = z.object({
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
-  limit: z.coerce.number().int().min(1).max(1000).default(100),
-  offset: z.coerce.number().int().min(0).default(0),
+  offset: offsetValue,
 });
 
 // ── Cultivation Cycle ─────────────────────────
@@ -153,8 +157,7 @@ const cycleQuerySchema = z.object({
   status: cycleStatusSchema.optional(),
   from: optionalDateValue,
   to: optionalDateValue,
-  limit: z.coerce.number().int().min(1).max(1000).default(100),
-  offset: z.coerce.number().int().min(0).default(0),
+  offset: offsetValue,
 });
 
 // ── Harvest Record ────────────────────────────
@@ -182,8 +185,7 @@ const updateHarvestSchema = z.object({
 const harvestQuerySchema = z.object({
   from: optionalDateValue,
   to: optionalDateValue,
-  limit: z.coerce.number().int().min(1).max(1000).default(100),
-  offset: z.coerce.number().int().min(0).default(0),
+  offset: offsetValue,
 });
 
 module.exports = {

@@ -67,11 +67,10 @@ class OtaService {
   /**
    * Get OTA logs for a device.
    */
-  async getLogs(deviceId, limit = 20) {
+  async getLogs(deviceId) {
     return prisma.otaLog.findMany({
       where: { deviceId },
       orderBy: { triggeredAt: 'desc' },
-      take: limit,
     });
   }
 }

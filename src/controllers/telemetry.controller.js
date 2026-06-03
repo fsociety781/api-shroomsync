@@ -21,7 +21,6 @@ const telemetryController = {
 
     ApiResponse.paginated(res, result.records, {
       total: result.total,
-      limit: result.limit,
       offset: result.offset,
     });
   }),
@@ -50,7 +49,6 @@ const telemetryController = {
 
     ApiResponse.paginated(res, result.records, {
       total: result.total,
-      limit: result.limit,
       offset: result.offset,
     });
   }),

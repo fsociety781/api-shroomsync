@@ -89,7 +89,7 @@ class CycleService {
     }
   }
 
-  async listCycles(deviceId, { status, from, to, limit = 100, offset = 0 }) {
+  async listCycles(deviceId, { status, from, to, offset = 0 }) {
     await this._ensureDeviceExists(deviceId);
 
     const where = { deviceId };
@@ -106,13 +106,12 @@ class CycleService {
         where,
         include: { _count: { select: { harvests: true } } },
         orderBy: { startedAt: 'desc' },
-        take: limit,
-        skip: offset,
+        ...(offset > 0 && { skip: offset }),
       }),
       prisma.cultivationCycle.count({ where }),
     ]);
 
-    return { records, total, limit, offset };
+    return { records, total, offset };
   }
 
   async createCycle(deviceId, data) {
@@ -175,7 +174,7 @@ class CycleService {
     return { deleted: true };
   }
 
-  async listHarvests(deviceId, cycleId, { from, to, limit = 100, offset = 0 }) {
+  async listHarvests(deviceId, cycleId, { from, to, offset = 0 }) {
     await this._getCycleOrThrow(deviceId, cycleId);
 
     const where = { cycleId };
@@ -190,13 +189,12 @@ class CycleService {
       prisma.harvestRecord.findMany({
         where,
         orderBy: { harvestedAt: 'desc' },
-        take: limit,
-        skip: offset,
+        ...(offset > 0 && { skip: offset }),
       }),
       prisma.harvestRecord.count({ where }),
     ]);
 
-    return { records, total, limit, offset };
+    return { records, total, offset };
   }
 
   async addHarvest(deviceId, cycleId, data) {

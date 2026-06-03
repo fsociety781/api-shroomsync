@@ -19,7 +19,6 @@ const cycleRoutes = require('./src/routes/cycle.routes');
 
 // Middleware
 const errorHandler = require('./src/middleware/error-handler');
-const { globalLimiter, strictLimiter } = require('./src/middleware/rate-limiter');
 const logger = require('./src/utils/logger');
 
 const app = express();
@@ -29,9 +28,6 @@ app.use(helmet());
 
 // ── Security: CORS (Production-ready) ────────
 app.use(cors(config.cors));
-
-// ── Rate Limiting ─────────────────────────────
-app.use(globalLimiter);
 
 // ── Parsing ───────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
@@ -63,8 +59,8 @@ app.get('/api/health', (req, res) => {
 app.use('/api/v1/devices', deviceRoutes);
 app.use('/api/v1/devices', telemetryRoutes);
 app.use('/api/v1/devices', cycleRoutes);
-app.use('/api/v1/devices', strictLimiter, controlRoutes);
-app.use('/api/v1/ota', strictLimiter, otaRoutes);
+app.use('/api/v1/devices', controlRoutes);
+app.use('/api/v1/ota', otaRoutes);
 
 // ── 404 Handler ───────────────────────────────
 app.use((req, res) => {

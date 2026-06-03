@@ -26,7 +26,6 @@ const cycleController = {
 
     ApiResponse.paginated(res, result.records, {
       total: result.total,
-      limit: result.limit,
       offset: result.offset,
     });
   }),
@@ -98,7 +97,6 @@ const cycleController = {
 
     ApiResponse.paginated(res, result.records, {
       total: result.total,
-      limit: result.limit,
       offset: result.offset,
     });
   }),
