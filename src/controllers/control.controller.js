@@ -5,6 +5,7 @@
 // ============================================
 
 const mqttService = require('../services/mqtt.service');
+const deviceService = require('../services/device.service');
 const { buildTopics } = require('../constants/mqtt-topics');
 const {
   controlModeSchema,
@@ -30,13 +31,13 @@ function sendCommand(res, deviceId, topicKey, payload) {
     return ApiResponse.error(res, `Unknown topic key: ${topicKey}`, 400);
   }
 
-  const success = mqttService.publish(topic, payload);
+  const mqttPublished = mqttService.publish(topic, payload);
 
-  if (!success) {
-    return ApiResponse.error(res, 'MQTT broker not connected', 503);
-  }
-
-  ApiResponse.success(res, { topic, payload }, 'Command sent');
+  ApiResponse.success(
+    res,
+    { topic, payload, mqttPublished },
+    mqttPublished ? 'Command sent and config saved' : 'Config saved, MQTT broker not connected'
+  );
 }
 
 const controlController = {
@@ -44,8 +45,11 @@ const controlController = {
    * POST /api/v1/devices/:deviceId/control/mode
    * Change control mode (1=Manual, 2=Auto, 3=Hybrid).
    */
-  changeControlMode: asyncHandler((req, res) => {
+  changeControlMode: asyncHandler(async (req, res) => {
     const data = controlModeSchema.parse(req.body);
+    await deviceService.updateConfig(req.params.deviceId, {
+      controlMode: data.mode,
+    });
     sendCommand(res, req.params.deviceId, 'cmdControlMode', data);
   }),
 
@@ -53,8 +57,14 @@ const controlController = {
    * POST /api/v1/devices/:deviceId/setpoint
    * Update temperature/humidity setpoints.
    */
-  updateSetpoint: asyncHandler((req, res) => {
+  updateSetpoint: asyncHandler(async (req, res) => {
     const data = setpointSchema.parse(req.body);
+    const update = {};
+    if (data.MinS != null) update.minS = data.MinS;
+    if (data.MidS != null) update.midS = data.MidS;
+    if (data.MinK != null) update.minK = data.MinK;
+    if (data.MidK != null) update.midK = data.MidK;
+    await deviceService.updateConfig(req.params.deviceId, update);
     sendCommand(res, req.params.deviceId, 'cmdSetpoint', data);
   }),
 
@@ -62,8 +72,12 @@ const controlController = {
    * POST /api/v1/devices/:deviceId/timer
    * Update pump timer config.
    */
-  updateTimer: asyncHandler((req, res) => {
+  updateTimer: asyncHandler(async (req, res) => {
     const data = timerSchema.parse(req.body);
+    await deviceService.updateConfig(req.params.deviceId, {
+      timerMinute: data.Menit,
+      timerSecond: data.Detik,
+    });
     sendCommand(res, req.params.deviceId, 'cmdTimer', data);
   }),
 
@@ -71,8 +85,12 @@ const controlController = {
    * POST /api/v1/devices/:deviceId/timer/floor
    * Update floor pump timer config.
    */
-  updateFloorTimer: asyncHandler((req, res) => {
+  updateFloorTimer: asyncHandler(async (req, res) => {
     const data = floorTimerSchema.parse(req.body);
+    await deviceService.updateConfig(req.params.deviceId, {
+      floorTimerMinute: data.FlrMenit,
+      floorTimerSecond: data.FlrDetik,
+    });
     sendCommand(res, req.params.deviceId, 'cmdFloorTimer', data);
   }),
 
@@ -80,8 +98,16 @@ const controlController = {
    * POST /api/v1/devices/:deviceId/schedule
    * Update all schedule slots at once.
    */
-  updateSchedule: asyncHandler((req, res) => {
+  updateSchedule: asyncHandler(async (req, res) => {
     const data = scheduleSchema.parse(req.body);
+    const update = {};
+    if (data.jam1 != null) update.schedule1Hour = data.jam1;
+    if (data.menit1 != null) update.schedule1Minute = data.menit1;
+    if (data.jam2 != null) update.schedule2Hour = data.jam2;
+    if (data.menit2 != null) update.schedule2Minute = data.menit2;
+    if (data.jam3 != null) update.schedule3Hour = data.jam3;
+    if (data.menit3 != null) update.schedule3Minute = data.menit3;
+    await deviceService.updateConfig(req.params.deviceId, update);
     sendCommand(res, req.params.deviceId, 'cmdScheduleUpdate', data);
   }),
 
@@ -89,8 +115,12 @@ const controlController = {
    * POST /api/v1/devices/:deviceId/schedule/floor
    * Update floor pump schedule.
    */
-  updateFloorSchedule: asyncHandler((req, res) => {
+  updateFloorSchedule: asyncHandler(async (req, res) => {
     const data = floorScheduleSchema.parse(req.body);
+    await deviceService.updateConfig(req.params.deviceId, {
+      floorScheduleHour: data.FlrJam,
+      floorScheduleMinute: data.FlrMenit,
+    });
     sendCommand(res, req.params.deviceId, 'cmdFloorSchedule', data);
   }),
 
@@ -98,8 +128,11 @@ const controlController = {
    * POST /api/v1/devices/:deviceId/schedule/mode
    * Change schedule mode (1x, 2x, 3x sehari).
    */
-  changeScheduleMode: asyncHandler((req, res) => {
+  changeScheduleMode: asyncHandler(async (req, res) => {
     const data = scheduleModeSchema.parse(req.body);
+    await deviceService.updateConfig(req.params.deviceId, {
+      scheduleMode: data.mode,
+    });
     sendCommand(res, req.params.deviceId, 'cmdScheduleMode', data);
   }),
 
