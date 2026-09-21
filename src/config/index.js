@@ -41,6 +41,12 @@ const config = {
   // Database
   databaseUrl: process.env.DATABASE_URL,
 
+  // JWT Authentication
+  jwt: {
+    secret: process.env.JWT_SECRET || 'shroomsync-secret-farmer-key-2026',
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  },
+
   // OTA
   firmwareUploadDir: process.env.FIRMWARE_UPLOAD_DIR || './storage/firmware',
 

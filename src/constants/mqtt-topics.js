@@ -27,6 +27,7 @@ function buildTopics(deviceId) {
     stateFloorSchedule: `${id}/state/schedule/floor`,
     stateActuator:    `${id}/state/actuator`,
     heartbeat:        `${id}/telemetry/heartbeat`,
+    activationCheck:  `${id}/activation/check`,
     otaStatus:        `shroomsync/ota/${id}/status`,
     legacyOtaStatus:  `${id}/legacy/ota/status`,
 
@@ -40,6 +41,7 @@ function buildTopics(deviceId) {
     cmdScheduleMode:  `${id}/cmd/schedule/mode`,
     cmdPump:          `${id}/cmd/actuator/pump`,
     cmdFan:           `${id}/cmd/actuator/fan`,
+    activationStatus: `${id}/activation/status`,
     otaTrigger:       `shroomsync/ota/${id}/trigger`,
     legacyOtaTrigger: `${id}/legacy/ota/trigger`,
   };
@@ -60,6 +62,7 @@ const SUBSCRIBE_PATTERNS = [
   '+/state/schedule/slot/2',
   '+/state/schedule/slot/3',
   '+/state/schedule/floor',
+  '+/activation/check',
   '+/legacy/ota/status',
   'shroomsync/ota/+/status',
 ];

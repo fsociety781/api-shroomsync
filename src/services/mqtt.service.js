@@ -18,7 +18,7 @@ let client = null;
 
 const SHROOMSYNC_OTA_STATUS_TOPIC_RE = /^shroomsync\/ota\/[^/]+\/status$/;
 const SCHEDULE_SLOT_ROUTE_RE = /^state\/schedule\/slot\/[1-3]$/;
-const SHROOMSYNC_DEVICE_ID_RE = /^(SS|SMC|SH|SHROOMSYNC)-/i;
+const SHROOMSYNC_DEVICE_ID_RE = /^(SCM|SS|SMC|SH|SHROOMSYNC)[-_]/i;
 const STANDARD_TOPIC_ROUTES = new Set([
   'telemetry/sensor',
   'telemetry/history',
@@ -30,6 +30,7 @@ const STANDARD_TOPIC_ROUTES = new Set([
   'state/timer/floor',
   'state/schedule/mode',
   'state/schedule/floor',
+  'activation/check',
   'legacy/ota/status',
 ]);
 
@@ -124,10 +125,11 @@ const mqttService = {
 
   /**
    * Publish a command to a device via MQTT.
-   * Wraps the payload in the firmware envelope format.
+   * Wraps the payload in both flat properties and nested "data" envelope
+   * for maximum compatibility across all firmware versions.
    *
    * @param {string} topic — Full MQTT topic
-   * @param {object} data — Payload data (goes into "data" field)
+   * @param {object} data — Payload data
    */
   publish(topic, data) {
     if (!client || !client.connected) {
@@ -135,8 +137,11 @@ const mqttService = {
       return false;
     }
 
+    const payloadObj = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { value: data };
+
     const envelope = {
-      data,
+      ...payloadObj,
+      data: payloadObj,
       clientId: SERVER_CLIENT_ID,
     };
 
@@ -149,6 +154,23 @@ const mqttService = {
       }
     });
     return true;
+  },
+
+  /**
+   * Publish activation status to device.
+   * Topic: {{device_id}}/activation/status
+   *
+   * @param {string} deviceId
+   * @param {{ activated: boolean, owner?: string, message?: string }} payload
+   */
+  publishActivationStatus(deviceId, { activated, owner = '', message = '' }) {
+    const topic = `${deviceId}/activation/status`;
+    const payload = {
+      activated: Boolean(activated),
+      owner: owner || '',
+      message: message || '',
+    };
+    return this.publish(topic, payload);
   },
 
   // ────────────────────────────────────────────
@@ -363,6 +385,9 @@ const mqttService = {
     } else if (topic.endsWith('/state/schedule/floor')) {
       await this._handleStateFloorSchedule(deviceId, data);
       handled = true;
+    } else if (topic.endsWith('/activation/check')) {
+      await this._handleActivationCheck(deviceId, data);
+      handled = true;
     } else if (topic.match(/^shroomsync\/ota\/.+\/status$/) || topic.endsWith('/legacy/ota/status')) {
       await this._handleOtaStatus(deviceId, data);
       handled = true;
@@ -377,26 +402,49 @@ const mqttService = {
   // ── TELEMETRY HANDLERS ──────────────────────
 
   async _handleSensorTelemetry(deviceId, data) {
-    // Validate data has expected fields
-    if (data.suhu == null || data.kelembaban == null) return;
+    const suhu = data.suhu ?? data.temperature ?? data.temp;
+    const kelembaban = data.kelembaban ?? data.humidity ?? data.hum;
+    if (suhu == null || kelembaban == null) return;
+
+    const normalized = {
+      ...data,
+      suhu: Number(suhu),
+      kelembaban: Number(kelembaban),
+    };
 
     // Mark device as online (auto-registers if unknown)
     await deviceService.markOnline(deviceId);
 
     // Store in database
-    await telemetryService.storeSensor(deviceId, data);
+    await telemetryService.storeSensor(deviceId, normalized);
 
     // Broadcast via Socket.IO
-    socketService.emitSensorTelemetry(deviceId, data);
+    socketService.emitSensorTelemetry(deviceId, normalized);
     socketService.emitDeviceOnline(deviceId);
   },
 
   async _handleHistoryTelemetry(deviceId, data) {
-    if (data.suhu == null || data.kelembaban == null) return;
+    const suhu = data.suhu ?? data.temperature ?? data.temp;
+    const kelembaban = data.kelembaban ?? data.humidity ?? data.hum;
+    if (suhu == null || kelembaban == null) return;
+
+    const normalized = {
+      ...data,
+      suhu: Number(suhu),
+      kelembaban: Number(kelembaban),
+    };
 
     await deviceService.markOnline(deviceId);
-    await telemetryService.storeHistory(deviceId, data);
-    socketService.emitHistoryTelemetry(deviceId, data);
+
+    // Store in BOTH history and sensor telemetry tables
+    await Promise.all([
+      telemetryService.storeHistory(deviceId, normalized),
+      telemetryService.storeSensor(deviceId, normalized),
+    ]);
+
+    // Broadcast both sensor and history to Socket.IO so frontend receives real-time updates
+    socketService.emitSensorTelemetry(deviceId, normalized);
+    socketService.emitHistoryTelemetry(deviceId, normalized);
     socketService.emitDeviceOnline(deviceId);
   },
 
@@ -558,6 +606,61 @@ const mqttService = {
     }
 
     socketService.emitOtaProgress(deviceId, data);
+  },
+
+  // ── ACTIVATION HANDLER ──────────────────────
+
+  /**
+   * Handle incoming device activation check: {{device_id}}/activation/check
+   * Payload: { device_id, mac_address, firmware_version, hardware_version, action }
+   */
+  async _handleActivationCheck(deviceId, data = {}) {
+    try {
+      // 1. Ensure device exists in DB & update firmware/hardware info
+      await deviceService.ensureDevice(deviceId, {
+        hardwareVersion: data.hardware_version,
+        firmwareVersion: data.firmware_version,
+      });
+      await deviceService.markOnline(deviceId);
+
+      // 2. Query ownership and activation status
+      const device = await prisma.device.findUnique({
+        where: { deviceId },
+        include: { user: true },
+      });
+
+      const isActivated = Boolean(device && device.userId && device.activatedAt);
+
+      if (isActivated) {
+        const ownerName = device.user?.fullName || device.user?.username || 'Petani ShroomSync';
+        const kumbungName = device.name || deviceId;
+        this.publishActivationStatus(deviceId, {
+          activated: true,
+          owner: ownerName,
+          message: `Perangkat berhasil diaktivasi untuk ${kumbungName}`,
+        });
+        console.log(`[MQTT] Activation check for ${deviceId}: ACTIVE (Owner: ${ownerName})`);
+      } else {
+        this.publishActivationStatus(deviceId, {
+          activated: false,
+          owner: '',
+          message: 'Perangkat belum diaktivasi',
+        });
+        console.log(`[MQTT] Activation check for ${deviceId}: NOT ACTIVATED`);
+      }
+
+      // 3. Emit real-time notification to web/mobile clients
+      socketService.emitDeviceActivationCheck(deviceId, {
+        deviceId,
+        macAddress: data.mac_address,
+        firmwareVersion: data.firmware_version,
+        hardwareVersion: data.hardware_version,
+        isActivated,
+        owner: isActivated ? (device.user?.fullName || device.user?.username) : null,
+      });
+    } catch (err) {
+      console.error(`[MQTT] Error in _handleActivationCheck for ${deviceId}:`, err.message);
+    }
   },
 };
 

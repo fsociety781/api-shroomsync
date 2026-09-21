@@ -52,7 +52,12 @@ server.listen(PORT, () => {
   console.log('');
   console.log('API Endpoints:');
   console.log('  GET    /api/health');
+  console.log('  POST   /api/v1/auth/login');
+  console.log('  POST   /api/v1/auth/complete-onboarding');
+  console.log('  GET    /api/v1/auth/me');
   console.log('  GET    /api/v1/devices');
+  console.log('  POST   /api/v1/devices/activate');
+  console.log('  POST   /api/v1/devices/unpair/:id');
   console.log('  POST   /api/v1/devices');
   console.log('  GET    /api/v1/devices/:id');
   console.log('  DELETE /api/v1/devices/:id');
@@ -67,9 +72,10 @@ server.listen(PORT, () => {
   console.log('  POST   /api/v1/devices/:id/actuator/fan');
   console.log('  GET    /api/v1/devices/:id/telemetry');
   console.log('  GET    /api/v1/devices/:id/telemetry/latest');
-  console.log('  POST   /api/v1/ota/trigger/:id');
-  console.log('  POST   /api/v1/ota/broadcast');
-  console.log('  GET    /api/v1/ota/logs/:id');
+  console.log('  GET    /api/v1/devices/:id/cycles');
+  console.log('  POST   /api/v1/devices/:id/cycles');
+  console.log('  GET    /api/v1/devices/:id/cycles/:cycleId/summary');
+  console.log('  POST   /api/v1/devices/:id/cycles/:cycleId/harvests');
   console.log('');
 });
 

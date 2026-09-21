@@ -3,20 +3,139 @@
 // ============================================
 
 const prisma = require('../utils/prisma');
-const { NotFoundError, ConflictError } = require('../utils/errors');
+const { NotFoundError, ConflictError, ValidationError, ForbiddenError } = require('../utils/errors');
 const fs = require('fs').promises;
 const path = require('path');
 const socketService = require('./socket.service');
 
+function getSignalQuality(rssiDbm) {
+  if (rssiDbm === null || rssiDbm === undefined) return 'Unknown';
+  if (rssiDbm >= -55) return 'Excellent';
+  if (rssiDbm >= -70) return 'Good';
+  if (rssiDbm >= -85) return 'Fair';
+  return 'Weak';
+}
+
+function formatDeviceProfile(device) {
+  if (!device) return null;
+  const { uptimeMs, ...safeDevice } = device;
+  return {
+    ...safeDevice,
+    signalStrength: getSignalQuality(device.rssiDbm),
+  };
+}
+
 class DeviceService {
   /**
    * List all registered devices with their config and online status.
+   * Jika userId diberikan dan bukan admin, hanya menampilkan perangkat milik user tersebut.
    */
-  async listDevices() {
-    return prisma.device.findMany({
+  async listDevices(userId = null, isAdmin = false) {
+    const where = (userId && !isAdmin) ? { userId } : {};
+    const devices = await prisma.device.findMany({
+      where,
       include: { config: true },
       orderBy: { createdAt: 'desc' },
     });
+    return devices.map(formatDeviceProfile);
+  }
+
+  /**
+   * Aktivasi / pairing perangkat ke akun petani (mendukung input ID atau Scan Barcode).
+   * 1 user bisa memiliki banyak device/kumbung.
+   */
+  async activateDevice({ deviceId, name, userId }) {
+    if (!deviceId) {
+      throw new ValidationError('Device ID wajib diisi');
+    }
+
+    let device = await prisma.device.findUnique({
+      where: { deviceId },
+      include: { config: true },
+    });
+
+    if (!device) {
+      device = await this.ensureDevice(deviceId);
+    }
+
+    if (device.userId && device.userId !== userId) {
+      throw new ConflictError(
+        'Perangkat ini sudah diaktivasi oleh akun petani lain. Hubungi pemilik perangkat atau admin sistem.'
+      );
+    }
+
+    const updated = await prisma.device.update({
+      where: { deviceId },
+      data: {
+        userId,
+        name: name || device.name || `Kumbung ${deviceId}`,
+        activatedAt: device.activatedAt || new Date(),
+      },
+      include: { config: true },
+      include: { config: true, user: true },
+    });
+
+    return formatDeviceProfile(updated);
+    const ownerName = updated.user?.fullName || updated.user?.username || 'Petani';
+    const kumbungName = updated.name || deviceId;
+
+    // Send MQTT activation command to ESP32: {{device_id}}/activation/status
+    try {
+      const mqttService = require('./mqtt.service');
+      mqttService.publishActivationStatus(deviceId, {
+        activated: true,
+        owner: ownerName,
+        message: `Perangkat berhasil diaktivasi untuk ${kumbungName}`,
+      });
+    } catch (err) {
+      console.error(`[DeviceService] Failed to publish MQTT activation for ${deviceId}:`, err.message);
+    }
+
+    const formatted = formatDeviceProfile(updated);
+    socketService.emitDeviceActivated(deviceId, formatted);
+
+    return formatted;
+  }
+
+  /**
+   * Unpair / lepas tautan perangkat dari akun.
+   */
+  async unpairDevice(deviceId, userId, isAdmin = false) {
+    const device = await prisma.device.findUnique({
+      where: { deviceId },
+    });
+
+    if (!device) {
+      throw new NotFoundError(`Device "${deviceId}" tidak ditemukan`);
+    }
+
+    if (!isAdmin && device.userId !== userId) {
+      throw new ForbiddenError('Anda tidak memiliki akses untuk melepas perangkat ini');
+    }
+
+    await prisma.device.update({
+      where: { deviceId },
+      data: {
+        userId: null,
+        activatedAt: null,
+      },
+    });
+
+    // Send MQTT deactivation command to ESP32: {{device_id}}/activation/status
+    try {
+      const mqttService = require('./mqtt.service');
+      mqttService.publishActivationStatus(deviceId, {
+        activated: false,
+        owner: '',
+        message: 'Perangkat dinonaktifkan oleh pengguna atau administrator',
+      });
+    } catch (err) {
+      console.error(`[DeviceService] Failed to publish MQTT unpair for ${deviceId}:`, err.message);
+    }
+
+    socketService.emitDeviceUnpaired(deviceId);
+
+    return { unshared: true, deviceId };
   }
 
   /**
@@ -30,7 +149,7 @@ class DeviceService {
     if (!device) {
       throw new NotFoundError(`Device "${deviceId}" not found`);
     }
-    return device;
+    return formatDeviceProfile(device);
   }
 
   /**
@@ -59,7 +178,7 @@ class DeviceService {
 
     await this._generateDeviceJsonFile(newDevice);
 
-    return newDevice;
+    return formatDeviceProfile(newDevice);
   }
 
   /**
@@ -131,17 +250,42 @@ class DeviceService {
 
   /**
    * Ensure a device exists (auto-register on first telemetry).
+   * Ensure a device exists (auto-register on first telemetry or activation check).
+   * Updates firmware/hardware version if provided in extra.
    */
   async ensureDevice(deviceId) {
+  async ensureDevice(deviceId, extra = {}) {
+    const hw = extra.hardwareVersion || extra.hardware_version;
+    const fw = extra.firmwareVersion || extra.firmware_version;
+
     const existing = await prisma.device.findUnique({
       where: { deviceId },
     });
     if (existing) return existing;
 
+    if (existing) {
+      if ((hw && hw !== existing.hardwareVersion) || (fw && fw !== existing.firmwareVersion)) {
+        try {
+          return await prisma.device.update({
+            where: { deviceId },
+            data: {
+              ...(hw && { hardwareVersion: hw }),
+              ...(fw && { firmwareVersion: fw }),
+            },
+          });
+        } catch {
+          return existing;
+        }
+      }
+      return existing;
+    }
+
     const newDevice = await prisma.device.create({
       data: {
         deviceId,
         name: deviceId,
+        hardwareVersion: hw || '1.0',
+        firmwareVersion: fw || '1.0.0',
         config: { create: {} },
       },
     });
@@ -184,11 +328,13 @@ class DeviceService {
 
     data.actuatorUpdatedAt = new Date();
 
-    return prisma.device.update({
+    const updated = await prisma.device.update({
       where: { deviceId },
       data,
       include: { config: true },
     });
+
+    return formatDeviceProfile(updated);
   }
 
   /**

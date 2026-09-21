@@ -75,6 +75,152 @@ npm run db:generate
 
 ---
 
+## Autentikasi & Onboarding Petani
+
+ShroomSync menggunakan sistem autentikasi **JWT (JSON Web Token)**. Sistem ini dirancang untuk mendukung alur onboarding akun petani baru:
+1. **Akun Dibuat Admin**: Petani diberikan akun dengan password default.
+2. **First-Time Login Check**: Saat login pertama, sistem mendeteksi akun baru (`mustSetupProfile: true`, `nextStep: "complete_profile"`).
+3. **Wajib Onboarding**: User baru wajib mengganti password default ke password pribadi dan melengkapi data diri (Nama, No. WhatsApp, Nama Usaha Kumbung, Alamat).
+4. **Dashboard & Aktivasi Perangkat**: Setelah onboarding selesai, petani masuk ke dashboard dan dapat mengaktivasi satu atau banyak perangkat kumbung via ID / Scan Barcode.
+
+### 🔑 Endpoints
+
+#### POST /auth/login
+Login pengguna dengan email atau username.
+
+**Request:**
+```http
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "identifier": "petani_sukamaju",
+  "password": "PasswordDefault123!"
+}
+```
+
+**Response — Akun Baru (Wajib Onboarding):**
+```json
+{
+  "status": "success",
+  "message": "Login berhasil. Silakan lengkapi data diri dan ganti password default Anda.",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "u-1234-uuid",
+      "email": "petani@gmail.com",
+      "username": "petani_sukamaju",
+      "fullName": null,
+      "role": "farmer",
+      "isFirstLogin": true,
+      "isProfileCompleted": false
+    },
+    "mustSetupProfile": true,
+    "nextStep": "complete_profile"
+  }
+}
+```
+
+**Response — Akun Lama (Langsung ke Dashboard):**
+```json
+{
+  "status": "success",
+  "message": "Login berhasil. Selamat datang kembali.",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "u-1234-uuid",
+      "email": "petani@gmail.com",
+      "username": "petani_sukamaju",
+      "fullName": "Pak Budi Santoso",
+      "role": "farmer",
+      "isFirstLogin": false,
+      "isProfileCompleted": true
+    },
+    "mustSetupProfile": false,
+    "nextStep": "dashboard"
+  }
+}
+```
+
+---
+
+#### POST /auth/complete-onboarding
+Menyelesaikan aktivasi profil akun baru: ganti password default & lengkapi biodata.
+
+**Headers:**
+```http
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
+  "currentPassword": "PasswordDefault123!",
+  "newPassword": "PasswordRahasiaBaru2026",
+  "fullName": "Budi Santoso",
+  "phoneNumber": "081234567890",
+  "farmName": "Kumbung Berkah Tiram Mandiri",
+  "farmAddress": "Desa Cibodas RT 03 RW 02, Lembang, Jawa Barat"
+}
+```
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Profil berhasil diperbarui dan password berhasil diganti. Selamat datang di ShroomSync!",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...(token_baru)",
+    "user": {
+      "id": "u-1234-uuid",
+      "email": "petani@gmail.com",
+      "username": "petani_sukamaju",
+      "fullName": "Budi Santoso",
+      "phoneNumber": "081234567890",
+      "farmName": "Kumbung Berkah Tiram Mandiri",
+      "farmAddress": "Desa Cibodas RT 03 RW 02, Lembang, Jawa Barat",
+      "isFirstLogin": false,
+      "isProfileCompleted": true
+    },
+    "mustSetupProfile": false,
+    "nextStep": "dashboard"
+  }
+}
+```
+
+---
+
+#### GET /auth/me
+Mengambil profil akun yang sedang login.
+
+**Headers:** `Authorization: Bearer {token}`
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "data": {
+    "user": {
+      "id": "u-1234-uuid",
+      "email": "petani@gmail.com",
+      "username": "petani_sukamaju",
+      "fullName": "Budi Santoso",
+      "phoneNumber": "081234567890",
+      "farmName": "Kumbung Berkah Tiram Mandiri",
+      "farmAddress": "Desa Cibodas RT 03 RW 02, Lembang, Jawa Barat",
+      "role": "farmer"
+    },
+    "deviceCount": 2,
+    "mustSetupProfile": false,
+    "nextStep": "dashboard"
+  }
+}
+```
+
+---
+
 ## Standar Response
 
 ### ✅ Success Response Format
@@ -252,6 +398,75 @@ try {
 
 ### 📱 Endpoints
 
+
+#### POST /devices/activate
+Mengaktivasi / menautkan perangkat kumbung jamur baru ke akun petani (mendukung **Input Serial Number** atau **Scan Barcode / QR Code** fisik dari alat ESP32).
+
+> **Multi-Kumbung**: Satu petani dapat mengaktivasi banyak perangkat (misal Kumbung 1, Kumbung 2, dll).
+
+**Headers:** `Authorization: Bearer {token}`
+
+**Request:**
+```http
+POST /api/v1/devices/activate
+Content-Type: application/json
+
+{
+  "deviceId": "SS-0426-001",
+  "name": "Kumbung Barat - Tiram Putih"
+}
+```
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Perangkat berhasil diaktivasi dan ditautkan ke akun Anda",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "deviceId": "SS-0426-001",
+    "name": "Kumbung Barat - Tiram Putih",
+    "userId": "u-1234-uuid",
+    "hardwareVersion": "1.0",
+    "firmwareVersion": "2.1.0",
+    "isOnline": true,
+    "rssiDbm": -65,
+    "signalStrength": "Good",
+    "pumpStatus": "OFF",
+    "floorPumpStatus": "OFF",
+    "activatedAt": "2026-09-15T14:45:00Z"
+  }
+}
+```
+
+**Response Error (409 Conflict):**
+```json
+{
+  "status": "error",
+  "message": "Perangkat ini sudah diaktivasi oleh akun petani lain. Hubungi pemilik perangkat atau admin sistem."
+}
+```
+
+---
+
+#### POST /devices/unpair/:deviceId
+Melepaskan tautan perangkat kumbung dari akun petani.
+
+**Headers:** `Authorization: Bearer {token}`
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Perangkat berhasil dilepas dari akun Anda",
+  "data": {
+    "unshared": true,
+    "deviceId": "SS-0426-001"
+  }
+}
+```
+
+---
 #### GET /devices
 Mendapatkan list semua device yang terdaftar.
 
@@ -1238,162 +1453,6 @@ GET /api/v1/devices/SS-0426-001/cycles/cycle-uuid/summary
 
 ---
 
-## OTA Updates
-
-### 🚀 Over-The-Air Updates
-
-#### POST /ota/trigger/:deviceId
-Memicu update firmware untuk satu device.
-
-**Request:**
-```http
-POST /api/v1/ota/trigger/SS-0426-001
-Content-Type: application/json
-
-{
-  "action": "update",
-  "hardware_version": "1.0",
-  "firmware_version": "1.1.0",
-  "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
-  "checksum_sha256": "optional-sha256",
-  "force": false
-}
-```
-
-**Body Parameters:**
-| Field | Type | Required | Deskripsi |
-|-------|------|----------|-----------|
-| `action` | string | ❌ | Aksi OTA, default `update` |
-| `hardware_version` | string | ✅ | Versi hardware target |
-| `firmware_version` | string | ✅ | Versi firmware target |
-| `url` | string | ✅ | URL download firmware (.bin file) |
-| `checksum_sha256` | string | ❌ | SHA-256 firmware untuk verifikasi |
-| `force` | boolean | ❌ | Paksa update walau versi sama, default `false` |
-
-**Response (200):**
-```json
-{
-  "status": "success",
-  "message": "OTA trigger sent to SS-0426-001",
-  "data": {
-    "topic": "shroomsync/ota/SS-0426-001/trigger",
-    "payload": {
-      "action": "update",
-      "hardware_version": "1.0",
-      "firmware_version": "1.1.0",
-      "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
-      "checksum_sha256": "optional-sha256",
-      "force": false
-    }
-  }
-}
-```
-
----
-
-#### POST /ota/legacy-trigger/:deviceId
-Memicu update firmware untuk device legacy.
-
-**Request:**
-```http
-POST /api/v1/ota/legacy-trigger/SS-0426-001
-Content-Type: application/json
-
-{
-  "action": "update",
-  "hardware_version": "1.0",
-  "firmware_version": "1.1.0",
-  "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
-  "force": false
-}
-```
-
-**Response (200):**
-```json
-{
-  "status": "success",
-  "message": "Legacy OTA trigger sent to SS-0426-001",
-  "data": {
-    "topic": "SS-0426-001/legacy/ota/trigger",
-    "payload": {
-      "action": "update",
-      "hardware_version": "1.0",
-      "firmware_version": "1.1.0",
-      "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
-      "force": false
-    }
-  }
-}
-```
-
----
-
-#### POST /ota/broadcast
-**⚠️ DANGER** — Memicu update ke semua device sekaligus.
-
-**Request:**
-```http
-POST /api/v1/ota/broadcast
-Content-Type: application/json
-
-{
-  "action": "update",
-  "hardware_version": "1.0",
-  "firmware_version": "1.1.0",
-  "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
-  "force": false
-}
-```
-
-**Response (200):**
-```json
-{
-  "status": "success",
-  "message": "OTA broadcast sent to all devices",
-  "data": {
-    "topic": "shroomsync/ota/broadcast",
-    "payload": {
-      "action": "update",
-      "hardware_version": "1.0",
-      "firmware_version": "1.1.0",
-      "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
-      "force": false
-    }
-  }
-}
-```
-
----
-
-#### GET /ota/logs/:deviceId
-Melihat log update firmware.
-
-**Request:**
-```http
-GET /api/v1/ota/logs/SS-0426-001?limit=20&offset=0
-```
-
-**Response (200):**
-```json
-{
-  "status": "success",
-  "data": [
-    {
-      "id": "uuid-log-1",
-      "deviceId": "SS-0426-001",
-      "firmwareVersion": "1.1.0",
-      "firmwareUrl": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
-      "progress": 100,
-      "status": "completed",
-      "triggeredAt": "2026-05-16T07:30:00.000Z",
-      "completedAt": "2026-05-16T07:32:15.000Z"
-    }
-  ]
-}
-```
-
----
-
 ## MQTT Protocol
 
 ### 📡 MQTT Topics & Payload
@@ -1536,24 +1595,6 @@ Topic: SS-0426-001/state/setpoint/auto
 | `{deviceId}/state/schedule/slot/3` | `Jam3`, `Menit3` |
 | `{deviceId}/state/schedule/floor` | `FlrJam`, `FlrMenit` |
 
-**Contoh Payload — OTA Status:**
-```text
-Topic: shroomsync/ota/SS-0426-001/status
-```
-```json
-{
-  "device_id": "SS-0426-001",
-  "seq": 61,
-  "uptime_ms": 700000,
-  "data": {
-    "status": "completed",
-    "progress": 100,
-    "firmware_version": "1.1.0"
-  },
-  "clientId": "SS-ESP32-DB4EB580"
-}
-```
-
 ---
 
 #### Server Publish (Kirim ke ESP32)
@@ -1659,20 +1700,6 @@ Data:
 {
   "fan": 1,
   "on": true
-}
-```
-
-**10. Trigger OTA Update:**
-```text
-Topic: shroomsync/ota/{deviceId}/trigger
-Data:
-{
-  "action": "update",
-  "hardware_version": "1.0",
-  "firmware_version": "1.1.0",
-  "url": "https://storage.shroomsync.com/firmware/v1.1.0.bin",
-  "checksum_sha256": "optional-sha256",
-  "force": false
 }
 ```
 

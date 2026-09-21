@@ -772,8 +772,9 @@ function DeviceDashboard() {
           >
             <div className="device-name">{device.name}</div>
             <div className={`status ${device.isOnline ? 'online' : 'offline'}`}>
-              {device.isOnline ? '🟢 Online' : '🔴 Offline'}
+              {device.isOnline ? '🟢 Online' : '🔴 Offline'} • Wi-Fi: {device.signalStrength || 'Good'} ({device.rssiDbm || -65} dBm)
             </div>
+            <small style={{ color: '#888' }}>Firmware v{device.firmwareVersion || '1.0.0'}</small>
           </div>
         ))}
       </div>
@@ -826,6 +827,69 @@ export default DeviceDashboard;
 
 ---
 
+## Alur Login, Onboarding Akun Baru & Aktivasi Perangkat (Barcode / ID)
+
+Berikut adalah panduan arsitektur frontend untuk alur pengguna:
+
+### 1. Alur Login & Deteksi Akun Baru
+```javascript
+// Login handler di halaman Login.jsx
+async function handleLogin(identifier, password) {
+  const res = await apiClient.post('/auth/login', { identifier, password });
+  const { token, mustSetupProfile, nextStep } = res.data;
+
+  // Simpan token JWT
+  localStorage.setItem('shroomsync_token', token);
+
+  // Jika akun baru, arahkan ke halaman setup data diri & ganti password
+  if (mustSetupProfile || nextStep === 'complete_profile') {
+    navigate('/complete-onboarding');
+  } else {
+    navigate('/dashboard');
+  }
+}
+```
+
+### 2. Form Onboarding (Ganti Password & Data Diri)
+```javascript
+// Onboarding.jsx
+async function handleSubmitOnboarding(formData) {
+  await apiClient.post('/auth/complete-onboarding', {
+    currentPassword: formData.currentPassword, // Password default dari admin
+    newPassword: formData.newPassword,         // Password baru pribadi
+    fullName: formData.fullName,
+    phoneNumber: formData.phoneNumber,
+    farmName: formData.farmName,
+    farmAddress: formData.farmAddress,
+  });
+
+  alert('Profil berhasil diatur! Selamat datang di dashboard Anda.');
+  navigate('/dashboard');
+}
+```
+
+### 3. Aktivasi Perangkat Baru (Input Serial atau Scan Barcode)
+```javascript
+// ActivateDeviceModal.jsx
+// Petani dapat memasukkan ID manual atau menggunakan kamera ponsel / scanner barcode
+async function handleActivateDevice(scannedDeviceId, kumbungName) {
+  try {
+    const res = await apiClient.post('/devices/activate', {
+      deviceId: scannedDeviceId, // contoh: "SS-0426-001" dari hasil scan kamera
+      name: kumbungName || `Kumbung ${scannedDeviceId}`,
+    });
+
+    alert('Kumbung jamur berhasil diaktivasi!');
+    // Refresh daftar perangkat user
+    loadUserDevices();
+  } catch (err) {
+    alert(err.message); // Menampilkan pesan jika device sudah diklaim akun lain
+  }
+}
+```
+
+---
+
 ## Debugging Tips
 
 ### Network Request Inspector
@@ -861,6 +925,51 @@ async function checkRateLimit() {
 ```
 
 ---
+
+## Cultivation Cycles & Harvest Workflow
+
+Fitur utama bagi petani (*farmer*) adalah manajemen siklus budidaya kumbung dan pencatatan panen harian:
+
+```javascript
+// services/CycleService.js
+class CycleService {
+  // Ambil daftar siklus budidaya untuk suatu kumbung/device
+  static async getCycles(deviceId) {
+    return apiClient.get(`/devices/${deviceId}/cycles`);
+  }
+
+  // Buka siklus budidaya baru
+  static async startCycle(deviceId, data) {
+    return apiClient.post(`/devices/${deviceId}/cycles`, {
+      name: data.name,                // Contoh: "Siklus Tiram Putih 01"
+      mushroomType: data.mushroomType, // Default: "Jamur Tiram"
+      strain: data.strain,            // Contoh: "Florida White"
+      baglogCount: data.baglogCount,  // Jumlah baglog
+      startedAt: data.startedAt,      // ISO date
+      expectedEndedAt: data.expectedEndedAt,
+      notes: data.notes,
+    });
+  }
+
+  // Ambil metrik produktivitas siklus (Yield per Baglog, Total Panen, Omzet, Peak Day)
+  static async getCycleSummary(deviceId, cycleId) {
+    return apiClient.get(`/devices/${deviceId}/cycles/${cycleId}/summary`);
+  }
+
+  // Catat panen harian baru
+  static async logHarvest(deviceId, cycleId, harvestData) {
+    return apiClient.post(`/devices/${deviceId}/cycles/${cycleId}/harvests`, {
+      harvestedAt: harvestData.harvestedAt || new Date().toISOString(),
+      weightKg: harvestData.weightKg,       // Berat panen (kg)
+      pricePerKg: harvestData.pricePerKg,   // Harga per kg (Rp)
+      grade: harvestData.grade || 'Grade A',
+      notes: harvestData.notes,
+    });
+  }
+}
+
+export default CycleService;
+```
 
 ## Need Help?
 

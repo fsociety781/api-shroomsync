@@ -11,10 +11,10 @@ const morgan = require('morgan');
 const config = require('./src/config');
 
 // Routes
+const authRoutes = require('./src/routes/auth.routes');
 const deviceRoutes = require('./src/routes/device.routes');
 const controlRoutes = require('./src/routes/control.routes');
 const telemetryRoutes = require('./src/routes/telemetry.routes');
-const otaRoutes = require('./src/routes/ota.routes');
 const cycleRoutes = require('./src/routes/cycle.routes');
 
 // Middleware
@@ -56,11 +56,11 @@ app.get('/api/health', (req, res) => {
 });
 
 // ── API Routes (v1) ───────────────────────────
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/devices', deviceRoutes);
 app.use('/api/v1/devices', telemetryRoutes);
 app.use('/api/v1/devices', cycleRoutes);
 app.use('/api/v1/devices', controlRoutes);
-app.use('/api/v1/ota', otaRoutes);
 
 // ── 404 Handler ───────────────────────────────
 app.use((req, res) => {
