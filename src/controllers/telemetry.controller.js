@@ -21,7 +21,6 @@ const telemetryController = {
 
     ApiResponse.paginated(res, result.records, {
       total: result.total,
-      limit: result.limit,
       offset: result.offset,
     });
   }),
@@ -32,12 +31,7 @@ const telemetryController = {
    */
   getLatestSensor: asyncHandler(async (req, res) => {
     const record = await telemetryService.getLatestSensor(req.params.deviceId);
-
-    if (!record) {
-      throw new NotFoundError('No sensor telemetry data found for this device');
-    }
-
-    ApiResponse.success(res, record);
+    ApiResponse.success(res, record || null);
   }),
 
   /**
@@ -50,7 +44,6 @@ const telemetryController = {
 
     ApiResponse.paginated(res, result.records, {
       total: result.total,
-      limit: result.limit,
       offset: result.offset,
     });
   }),
@@ -61,12 +54,7 @@ const telemetryController = {
    */
   getLatestHistory: asyncHandler(async (req, res) => {
     const record = await telemetryService.getLatestHistory(req.params.deviceId);
-
-    if (!record) {
-      throw new NotFoundError('No history telemetry data found for this device');
-    }
-
-    ApiResponse.success(res, record);
+    ApiResponse.success(res, record || null);
   }),
 };
 

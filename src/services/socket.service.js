@@ -93,6 +93,24 @@ const socketService = {
   },
 
   /**
+   * Emit device online event.
+   */
+  emitDeviceOnline(deviceId) {
+    if (!io) return;
+    io.to(`device:${deviceId}`).emit('device:online', { deviceId, isOnline: true });
+    io.emit('device:online', { deviceId, isOnline: true });
+  },
+
+  /**
+   * Emit device offline event.
+   */
+  emitDeviceOffline(deviceId) {
+    if (!io) return;
+    io.to(`device:${deviceId}`).emit('device:offline', { deviceId, isOnline: false });
+    io.emit('device:offline', { deviceId, isOnline: false });
+  },
+
+  /**
    * Emit OTA progress.
    */
   emitOtaProgress(deviceId, data) {
@@ -102,6 +120,40 @@ const socketService = {
       ...data,
     });
     io.emit('ota:progress', { deviceId, ...data });
+  },
+
+  /**
+   * Emit device activation check event.
+   * Triggered when ESP32 sends {{device_id}}/activation/check.
+   */
+  emitDeviceActivationCheck(deviceId, data) {
+    if (!io) return;
+    io.to(`device:${deviceId}`).emit('device:activation_check', {
+      deviceId,
+      ...data,
+    });
+    io.emit('device:activation_check', { deviceId, ...data });
+  },
+
+  /**
+   * Emit device activated event.
+   */
+  emitDeviceActivated(deviceId, data) {
+    if (!io) return;
+    io.to(`device:${deviceId}`).emit('device:activated', {
+      deviceId,
+      ...data,
+    });
+    io.emit('device:activated', { deviceId, ...data });
+  },
+
+  /**
+   * Emit device unpaired event.
+   */
+  emitDeviceUnpaired(deviceId) {
+    if (!io) return;
+    io.to(`device:${deviceId}`).emit('device:unpaired', { deviceId });
+    io.emit('device:unpaired', { deviceId });
   },
 };
 

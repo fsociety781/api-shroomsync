@@ -12,11 +12,46 @@ const ApiResponse = require('../utils/api-response');
 const deviceController = {
   /**
    * GET /api/v1/devices
-   * List all registered devices.
+   * List all registered devices (difilter per user jika terautentikasi).
    */
   listDevices: asyncHandler(async (req, res) => {
-    const devices = await deviceService.listDevices();
+    const userId = req.user ? req.user.id : null;
+    const isAdmin = req.user ? req.user.role === 'admin' : false;
+    const devices = await deviceService.listDevices(userId, isAdmin);
     ApiResponse.success(res, devices);
+  }),
+
+  /**
+   * POST /api/v1/devices/activate
+   * Aktivasi / pairing device ke akun user via input ID atau Scan Barcode
+   */
+  activateDevice: asyncHandler(async (req, res) => {
+    const { deviceId, name } = req.body;
+    const device = await deviceService.activateDevice({
+      deviceId,
+      name,
+      userId: req.user.id,
+    });
+    ApiResponse.success(
+      res,
+      device,
+      'Perangkat berhasil diaktivasi dan ditautkan ke akun Anda',
+      200
+    );
+  }),
+
+  /**
+   * POST /api/v1/devices/unpair/:deviceId
+   * Lepas tautan device dari akun
+   */
+  unpairDevice: asyncHandler(async (req, res) => {
+    const isAdmin = req.user ? req.user.role === 'admin' : false;
+    const result = await deviceService.unpairDevice(
+      req.params.deviceId,
+      req.user.id,
+      isAdmin
+    );
+    ApiResponse.success(res, result, 'Perangkat berhasil dilepas dari akun Anda');
   }),
 
   /**

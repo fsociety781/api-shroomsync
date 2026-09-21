@@ -25,7 +25,7 @@ class ApiResponse {
    *
    * @param {Object} res - Express response object
    * @param {Array} data - Array of payload items
-   * @param {Object} pagination - Pagination metadata {total, limit, offset}
+   * @param {Object} pagination - Pagination metadata {total, offset}
    * @param {Number} [statusCode=200] - HTTP status code
    */
   static paginated(res, data, pagination, statusCode = 200) {

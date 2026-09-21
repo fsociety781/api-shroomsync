@@ -16,6 +16,7 @@ const config = require('../src/config');
 const mqttService = require('../src/services/mqtt.service');
 const socketService = require('../src/services/socket.service');
 const telemetryService = require('../src/services/telemetry.service');
+const deviceStatusService = require('../src/services/device-status.service');
 
 // ── Create HTTP Server ────────────────────────
 const server = http.createServer(app);
@@ -29,22 +30,34 @@ mqttService.connect();
 // ── Start Telemetry Retention Job ─────────────
 telemetryService.startRetentionJob();
 
+// ── Start Device Status Timeout Job ────────────
+deviceStatusService.startTimeoutJob();
+
 // ── Start Listening ───────────────────────────
-const PORT = config.port;
+const PORT = config.port || 3000;
+const HOST = '0.0.0.0';
 server.listen(PORT, () => {
-  console.log('');
+   console.log('');
   console.log('╔══════════════════════════════════════════════╗');
   console.log('║       🍄 ShroomSync Backend Server 🍄        ║');
   console.log('╠══════════════════════════════════════════════╣');
-  console.log(`║  HTTP API:    http://localhost:${PORT}           ║`);
-  console.log(`║  Socket.IO:   ws://localhost:${PORT}             ║`);
+  console.log(`║  HTTP API:    http://${HOST}:${PORT}             ║`);
+  console.log(`║  Socket.IO:   ws://${HOST}:${PORT}               ║`);
   console.log(`║  MQTT Broker: ${config.mqtt.brokerUrl.padEnd(27)}   ║`);
   console.log(`║  Environment: ${config.nodeEnv.padEnd(27)}   ║`);
   console.log('╚══════════════════════════════════════════════╝');
   console.log('');
+  console.log('IMPORTANT: Untuk akses dari APK/HP, gunakan IP laptop/server.');
+  console.log(`Contoh: http://IP_LAPTOP:${PORT}/api/health`);
+  console.log('');
   console.log('API Endpoints:');
   console.log('  GET    /api/health');
+  console.log('  POST   /api/v1/auth/login');
+  console.log('  POST   /api/v1/auth/complete-onboarding');
+  console.log('  GET    /api/v1/auth/me');
   console.log('  GET    /api/v1/devices');
+  console.log('  POST   /api/v1/devices/activate');
+  console.log('  POST   /api/v1/devices/unpair/:id');
   console.log('  POST   /api/v1/devices');
   console.log('  GET    /api/v1/devices/:id');
   console.log('  DELETE /api/v1/devices/:id');
@@ -59,9 +72,10 @@ server.listen(PORT, () => {
   console.log('  POST   /api/v1/devices/:id/actuator/fan');
   console.log('  GET    /api/v1/devices/:id/telemetry');
   console.log('  GET    /api/v1/devices/:id/telemetry/latest');
-  console.log('  POST   /api/v1/ota/trigger/:id');
-  console.log('  POST   /api/v1/ota/broadcast');
-  console.log('  GET    /api/v1/ota/logs/:id');
+  console.log('  GET    /api/v1/devices/:id/cycles');
+  console.log('  POST   /api/v1/devices/:id/cycles');
+  console.log('  GET    /api/v1/devices/:id/cycles/:cycleId/summary');
+  console.log('  POST   /api/v1/devices/:id/cycles/:cycleId/harvests');
   console.log('');
 });
 
@@ -97,6 +111,9 @@ function shutdown(signal) {
 
   // Stop telemetry retention job
   telemetryService.stopRetentionJob();
+
+  // Stop device status timeout job
+  deviceStatusService.stopTimeoutJob();
 
   // Disconnect Prisma
   const prisma = require('../src/utils/prisma');

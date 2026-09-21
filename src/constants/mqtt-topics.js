@@ -25,7 +25,11 @@ function buildTopics(deviceId) {
     stateSchedule2:   `${id}/state/schedule/slot/2`,
     stateSchedule3:   `${id}/state/schedule/slot/3`,
     stateFloorSchedule: `${id}/state/schedule/floor`,
+    stateActuator:    `${id}/state/actuator`,
+    heartbeat:        `${id}/telemetry/heartbeat`,
+    activationCheck:  `${id}/activation/check`,
     otaStatus:        `shroomsync/ota/${id}/status`,
+    legacyOtaStatus:  `${id}/legacy/ota/status`,
 
     // ── Server → ESP32 (we PUBLISH / device SUBSCRIBES) ──
     cmdControlMode:   `${id}/cmd/control/mode`,
@@ -37,7 +41,9 @@ function buildTopics(deviceId) {
     cmdScheduleMode:  `${id}/cmd/schedule/mode`,
     cmdPump:          `${id}/cmd/actuator/pump`,
     cmdFan:           `${id}/cmd/actuator/fan`,
+    activationStatus: `${id}/activation/status`,
     otaTrigger:       `shroomsync/ota/${id}/trigger`,
+    legacyOtaTrigger: `${id}/legacy/ota/trigger`,
   };
 }
 
@@ -45,7 +51,19 @@ function buildTopics(deviceId) {
 const SUBSCRIBE_PATTERNS = [
   '+/telemetry/sensor',
   '+/telemetry/history',
-  '+/state/#',
+  '+/telemetry/heartbeat',
+  '+/state/actuator',
+  '+/state/control/mode',
+  '+/state/setpoint/auto',
+  '+/state/timer/auto',
+  '+/state/timer/floor',
+  '+/state/schedule/mode',
+  '+/state/schedule/slot/1',
+  '+/state/schedule/slot/2',
+  '+/state/schedule/slot/3',
+  '+/state/schedule/floor',
+  '+/activation/check',
+  '+/legacy/ota/status',
   'shroomsync/ota/+/status',
 ];
 

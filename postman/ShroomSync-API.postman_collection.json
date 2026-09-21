@@ -7,12 +7,22 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3000",
+      "value": "https://shroomsync.web.id",
       "type": "string"
     },
     {
       "key": "deviceId",
       "value": "SHROOMSYNC-ESP32-TEST",
+      "type": "string"
+    },
+    {
+      "key": "cycleId",
+      "value": "sample-cycle-id",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
       "type": "string"
     }
   ],
@@ -27,10 +37,185 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/health",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "health"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
             },
             "description": "Check server status, uptime, and version."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔐 Authentication & Onboarding",
+      "item": [
+        {
+          "name": "1. Login — Akun Baru (First Time)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"petani_baru\",\n  \"password\": \"PasswordDefault123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login pertama kali dengan password default. Mengembalikan token dan mustSetupProfile: true."
+          }
+        },
+        {
+          "name": "2. Complete Onboarding (Ganti Password & Data Diri)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"PasswordDefault123!\",\n  \"newPassword\": \"PasswordRahasiaBaru2026\",\n  \"fullName\": \"Budi Santoso\",\n  \"phoneNumber\": \"081234567890\",\n  \"farmName\": \"Kumbung Berkah Tiram\",\n  \"farmAddress\": \"Desa Sukamaju RT 02 RW 01, Lembang, Bandung Barat\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/complete-onboarding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "complete-onboarding"
+              ]
+            },
+            "description": "Wajib untuk akun baru: ganti password default dan isi data diri lengkap."
+          }
+        },
+        {
+          "name": "3. Login — Akun Lama (Normal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"petani_baru\",\n  \"password\": \"PasswordRahasiaBaru2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login normal setelah onboarding selesai. Langsung mengembalikan nextStep: 'dashboard'."
+          }
+        },
+        {
+          "name": "4. Get Current User Profile (/me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Mengambil data profil akun yang sedang login beserta jumlah device/kumbung yang dimiliki."
+          }
+        },
+        {
+          "name": "5. Register Farmer Account (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"petani_baru@gmail.com\",\n  \"username\": \"petani_baru\",\n  \"password\": \"PasswordDefault123!\",\n  \"fullName\": \"Calon Petani Jamur\",\n  \"farmName\": \"Kumbung Jamur Mandiri\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register-farmer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register-farmer"
+              ]
+            },
+            "description": "Membuat akun petani baru dengan password default (status: isFirstLogin=true)."
           }
         }
       ]
@@ -39,14 +224,58 @@
       "name": "📱 Device Management",
       "item": [
         {
+          "name": "Activate / Pair Device (Input ID or Barcode)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"name\": \"Kumbung Barat - Tiram Putih\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/activate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "activate"
+              ]
+            },
+            "description": "Aktivasi perangkat kumbung jamur baru ke akun user melalui scan barcode / input ID."
+          }
+        },
+        {
           "name": "List All Devices",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices"
+              ]
             },
             "description": "Get all registered devices with their configurations."
           }
@@ -58,8 +287,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}"
+              ]
             },
             "description": "Get a specific device with its full config (setpoints, timers, schedules)."
           }
@@ -80,8 +316,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices"
+              ]
             },
             "description": "Register a new ShroomSync device. Auto-creates a default DeviceConfig."
           }
@@ -93,10 +335,43 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}"
+              ]
             },
             "description": "Remove a device and all its telemetry, config, and OTA logs (cascade delete)."
+          }
+        },
+        {
+          "name": "Unpair Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/unpair/{{deviceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "unpair",
+                "{{deviceId}}"
+              ]
+            },
+            "description": "Melepas tautan device kumbung dari akun pengguna."
           }
         }
       ]
@@ -126,8 +401,17 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/control/mode",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "control", "mode"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "control",
+                "mode"
+              ]
             },
             "description": "Change device control mode.\n\n**Values:**\n- `1` = Manual\n- `2` = Auto (Fuzzy/SetPoint)\n- `3` = Hybrid/Schedule\n\n**MQTT Topic:** `{deviceId}/cmd/control/mode`"
           }
@@ -153,8 +437,16 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/setpoint",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "setpoint"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "setpoint"
+              ]
             },
             "description": "Update temperature and humidity setpoints for Auto mode.\n\n- **MinS** — Minimum Suhu (°C)\n- **MidS** — Mid Suhu (°C)\n- **MinK** — Minimum Kelembaban (%)\n- **MidK** — Mid Kelembaban (%)\n\n**MQTT Topic:** `{deviceId}/cmd/setpoint/auto`"
           }
@@ -180,8 +472,16 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/timer",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "timer"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "timer"
+              ]
             },
             "description": "Update main pump timer cycle duration.\n\n**MQTT Topic:** `{deviceId}/cmd/timer/auto`"
           }
@@ -207,8 +507,17 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/timer/floor",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "timer", "floor"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "timer",
+                "floor"
+              ]
             },
             "description": "Update floor pump timer cycle duration.\n\n**MQTT Topic:** `{deviceId}/cmd/timer/floor`"
           }
@@ -234,8 +543,16 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/schedule",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "schedule"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "schedule"
+              ]
             },
             "description": "Update all 3 schedule time slots at once.\n\n**MQTT Topic:** `{deviceId}/cmd/schedule/update`"
           }
@@ -261,8 +578,17 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/schedule/floor",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "schedule", "floor"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "schedule",
+                "floor"
+              ]
             },
             "description": "Update floor pump schedule time.\n\n**MQTT Topic:** `{deviceId}/cmd/schedule/floor`"
           }
@@ -288,8 +614,17 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/schedule/mode",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "schedule", "mode"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "schedule",
+                "mode"
+              ]
             },
             "description": "Change schedule mode.\n\n**Values:**\n- `1` = 1x sehari\n- `2` = 2x sehari\n- `3` = 3x sehari\n\n**MQTT Topic:** `{deviceId}/cmd/schedule/mode`"
           }
@@ -315,8 +650,17 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/actuator/pump",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "actuator", "pump"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "actuator",
+                "pump"
+              ]
             },
             "description": "Manual override: turn mist pump ON.\n\n**MQTT Topic:** `{deviceId}/cmd/actuator/pump`"
           }
@@ -342,8 +686,17 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/actuator/pump",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "actuator", "pump"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "actuator",
+                "pump"
+              ]
             },
             "description": "Manual override: turn mist pump OFF.\n\n**MQTT Topic:** `{deviceId}/cmd/actuator/pump`"
           }
@@ -369,8 +722,17 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/actuator/fan",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "actuator", "fan"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "actuator",
+                "fan"
+              ]
             },
             "description": "Manual override: turn fan/floor pump ON.\n\n**MQTT Topic:** `{deviceId}/cmd/actuator/fan`"
           }
@@ -396,8 +758,17 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/actuator/fan",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "actuator", "fan"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "actuator",
+                "fan"
+              ]
             },
             "description": "Manual override: turn fan/floor pump OFF.\n\n**MQTT Topic:** `{deviceId}/cmd/actuator/fan`"
           }
@@ -414,8 +785,18 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/telemetry/sensor/latest",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "telemetry", "sensor", "latest"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "telemetry",
+                "sensor",
+                "latest"
+              ]
             },
             "description": "Get the most recent sensor reading (suhu, kelembaban) for a device."
           }
@@ -427,8 +808,17 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/telemetry/sensor?limit=50&offset=0",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "telemetry", "sensor"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "telemetry",
+                "sensor"
+              ],
               "query": [
                 {
                   "key": "limit",
@@ -464,8 +854,18 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/telemetry/history/latest",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "telemetry", "history", "latest"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "telemetry",
+                "history",
+                "latest"
+              ]
             },
             "description": "Get the most recent system state reading (mode, pump) for a device."
           }
@@ -477,8 +877,17 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/telemetry/history?limit=50&offset=0",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "telemetry", "history"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "telemetry",
+                "history"
+              ],
               "query": [
                 {
                   "key": "limit",
@@ -510,73 +919,145 @@
       ]
     },
     {
-      "name": "🚀 OTA Updates",
+      "name": "🍄 Cultivation Cycles & Harvest",
       "item": [
         {
-          "name": "Trigger OTA (Single Device)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"action\": \"update\",\n  \"hardware_version\": \"1.0\",\n  \"firmware_version\": \"1.2.0\",\n  \"url\": \"http://cdn.example.com/firmware/v1.2.0.bin\",\n  \"checksum_sha256\": \"\",\n  \"force\": false\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/ota/trigger/{{deviceId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "ota", "trigger", "{{deviceId}}"]
-            },
-            "description": "Trigger OTA firmware update for a specific device.\n\n⚠️ `hardware_version` MUST match the device's HARDWARE_VERSION or it will abort.\n\n**MQTT Topic:** `shroomsync/ota/{deviceId}/trigger`"
-          }
-        },
-        {
-          "name": "Trigger OTA (Broadcast All)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"action\": \"update\",\n  \"hardware_version\": \"1.0\",\n  \"firmware_version\": \"1.2.0\",\n  \"url\": \"http://cdn.example.com/firmware/v1.2.0.bin\",\n  \"checksum_sha256\": \"\",\n  \"force\": false\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/ota/broadcast",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "ota", "broadcast"]
-            },
-            "description": "Trigger OTA firmware update for ALL online devices simultaneously.\n\n⚠️ Use with caution — this affects the entire fleet!\n\n**MQTT Topic:** `shroomsync/ota/broadcast`"
-          }
-        },
-        {
-          "name": "Get OTA Logs",
+          "name": "List Cycles",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/ota/logs/{{deviceId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "ota", "logs", "{{deviceId}}"]
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/cycles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "cycles"
+              ]
             },
-            "description": "Get OTA update history for a device (status, progress, firmware version)."
+            "description": "Get all cultivation cycles for this device/kumbung."
+          }
+        },
+        {
+          "name": "Create Cultivation Cycle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Siklus Tiram Putih Batch 1\",\n  \"mushroomType\": \"Jamur Tiram\",\n  \"strain\": \"Florida White\",\n  \"baglogCount\": 1000,\n  \"startedAt\": \"2026-09-15T07:05:17.451Z\",\n  \"expectedEndedAt\": \"2026-11-14T07:05:17.454Z\",\n  \"notes\": \"Bibit F3 dari lab lokal\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/cycles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "cycles"
+              ]
+            },
+            "description": "Start a new mushroom cultivation cycle."
+          }
+        },
+        {
+          "name": "Get Cycle Summary & Productivity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/cycles/{{cycleId}}/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "cycles",
+                "{{cycleId}}",
+                "summary"
+              ]
+            },
+            "description": "Get comprehensive productivity metrics: total harvest, yield per baglog, total revenue, peak harvest day, and daily breakdown."
+          }
+        },
+        {
+          "name": "Add Harvest Record",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"harvestedAt\": \"2026-09-15T07:05:17.454Z\",\n  \"weightKg\": 15.5,\n  \"pricePerKg\": 18000,\n  \"grade\": \"Grade A\",\n  \"notes\": \"Panen pagi hari, kualitas payung jamur sangat segar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/cycles/{{cycleId}}/harvests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "cycles",
+                "{{cycleId}}",
+                "harvests"
+              ]
+            },
+            "description": "Log daily mushroom harvest weight and price."
+          }
+        },
+        {
+          "name": "List Harvest Records",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/cycles/{{cycleId}}/harvests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "cycles",
+                "{{cycleId}}",
+                "harvests"
+              ]
+            },
+            "description": "List all harvest logs for the given cycle."
           }
         }
       ]
@@ -591,8 +1072,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/NON-EXISTENT-ID",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "NON-EXISTENT-ID"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "NON-EXISTENT-ID"
+              ]
             },
             "description": "Test 404 error handling — requesting a device that doesn't exist."
           }
@@ -618,8 +1106,17 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/control/mode",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices", "{{deviceId}}", "control", "mode"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}",
+                "control",
+                "mode"
+              ]
             },
             "description": "Test validation error — mode must be 1-3."
           }
@@ -645,8 +1142,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices"
+              ]
             },
             "description": "Test validation error — deviceId is required."
           }
@@ -672,8 +1175,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/devices",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "devices"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices"
+              ]
             },
             "description": "Test conflict error — registering a device that already exists."
           }
@@ -685,8 +1194,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/invalid-route",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "invalid-route"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "invalid-route"
+              ]
             },
             "description": "Test 404 for non-existent API route."
           }

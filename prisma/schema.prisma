@@ -12,23 +12,55 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── User Management ──────────────────────────
+model User {
+  id                 String    @id @default(uuid())
+  email              String    @unique @db.VarChar(100)
+  username           String    @unique @db.VarChar(50)
+  password           String    @db.VarChar(255)
+  fullName           String?   @map("full_name") @db.VarChar(100)
+  phoneNumber        String?   @map("phone_number") @db.VarChar(20)
+  farmName           String?   @map("farm_name") @db.VarChar(100)
+  farmAddress        String?   @map("farm_address") @db.Text
+  role               String    @default("farmer") @db.VarChar(20)
+  isFirstLogin       Boolean   @default(true) @map("is_first_login")
+  isProfileCompleted Boolean   @default(false) @map("is_profile_completed")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  devices            Device[]
+
+  @@map("users")
+}
+
 // ── Device Registry ──────────────────────────
 model Device {
-  id              String    @id @default(uuid())
-  deviceId        String    @unique @map("device_id")
-  name            String?   @db.VarChar(100)
-  hardwareVersion String    @default("1.0") @map("hardware_version") @db.VarChar(20)
-  firmwareVersion String    @default("1.0.0") @map("firmware_version") @db.VarChar(20)
-  isOnline        Boolean   @default(false) @map("is_online")
-  lastSeenAt      DateTime? @map("last_seen_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  deviceId          String    @unique @map("device_id")
+  name              String?   @db.VarChar(100)
+  userId            String?   @map("user_id")
+  user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  activatedAt       DateTime? @map("activated_at")
+  hardwareVersion   String    @default("1.0") @map("hardware_version") @db.VarChar(20)
+  firmwareVersion   String    @default("1.0.0") @map("firmware_version") @db.VarChar(20)
+  isOnline          Boolean   @default(false) @map("is_online")
+  rssiDbm           Int?      @map("rssi_dbm")
+  uptimeMs          Int?      @map("uptime_ms")
+  sensorValid       Boolean?  @default(true) @map("sensor_valid")
+  pumpStatus        String    @default("OFF") @map("pump_status") @db.VarChar(10)
+  floorPumpStatus   String    @default("OFF") @map("floor_pump_status") @db.VarChar(10)
+  actuatorUpdatedAt DateTime? @map("actuator_updated_at")
+  lastSeenAt        DateTime? @map("last_seen_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  config           DeviceConfig?
-  sensorTelemetry  SensorTelemetry[]
-  historyTelemetry HistoryTelemetry[]
-  otaLogs          OtaLog[]
+  config            DeviceConfig?
+  sensorTelemetry   SensorTelemetry[]
+  historyTelemetry  HistoryTelemetry[]
+  otaLogs           OtaLog[]
+  cultivationCycles CultivationCycle[]
 
+  @@index([userId])
   @@map("devices")
 }
 
@@ -119,4 +151,44 @@ model OtaLog {
 
   @@index([deviceId, triggeredAt])
   @@map("ota_logs")
+}
+
+// ── Mushroom Cultivation Cycles ──────────────
+model CultivationCycle {
+  id              String    @id @default(uuid())
+  deviceId        String    @map("device_id")
+  device          Device    @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  name            String?   @db.VarChar(120)
+  mushroomType    String    @default("Jamur Tiram") @map("mushroom_type") @db.VarChar(100)
+  strain          String?   @db.VarChar(100)
+  baglogCount     Int?      @map("baglog_count")
+  startedAt       DateTime  @map("started_at")
+  expectedEndedAt DateTime? @map("expected_ended_at")
+  endedAt         DateTime? @map("ended_at")
+  status          String    @default("active") @db.VarChar(20)
+  notes           String?   @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  harvests HarvestRecord[]
+
+  @@index([deviceId, status, startedAt])
+  @@map("cultivation_cycles")
+}
+
+// ── Harvest Records per Cycle ────────────────
+model HarvestRecord {
+  id          String           @id @default(uuid())
+  cycleId     String           @map("cycle_id")
+  cycle       CultivationCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  harvestedAt DateTime         @map("harvested_at")
+  weightKg    Float            @map("weight_kg")
+  pricePerKg  Float?           @map("price_per_kg")
+  grade       String?          @db.VarChar(50)
+  notes       String?          @db.Text
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@index([cycleId, harvestedAt])
+  @@map("harvest_records")
 }

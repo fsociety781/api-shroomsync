@@ -43,12 +43,33 @@ class TelemetryService {
 
   /**
    * Get the latest sensor telemetry reading for a device.
+   * Falls back to history telemetry if sensor telemetry has no readings yet.
    */
   async getLatestSensor(deviceId) {
-    return prisma.sensorTelemetry.findFirst({
+    const sensor = await prisma.sensorTelemetry.findFirst({
       where: { deviceId },
       orderBy: { createdAt: 'desc' },
     });
+
+    if (sensor) return sensor;
+
+    const history = await prisma.historyTelemetry.findFirst({
+      where: { deviceId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (history) {
+      return {
+        id: history.id,
+        deviceId: history.deviceId,
+        temperature: history.temperature,
+        humidity: history.humidity,
+        recordedAt: history.recordedAt,
+        createdAt: history.createdAt,
+      };
+    }
+
+    return null;
   }
 
   /**
@@ -63,8 +84,9 @@ class TelemetryService {
 
   /**
    * Query sensor telemetry with pagination and optional time range.
+   * Falls back to history records if sensor records are empty.
    */
-  async querySensor(deviceId, { from, to, limit = 100, offset = 0 }) {
+  async querySensor(deviceId, { from, to, offset = 0 }) {
     const where = { deviceId };
 
     if (from || to) {
@@ -73,23 +95,44 @@ class TelemetryService {
       if (to) where.createdAt.lte = new Date(to);
     }
 
-    const [records, total] = await Promise.all([
+    let [records, total] = await Promise.all([
       prisma.sensorTelemetry.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
+        ...(offset > 0 && { skip: offset }),
       }),
       prisma.sensorTelemetry.count({ where }),
     ]);
 
-    return { records, total, limit, offset };
+    // Fallback: If no dedicated sensor records exist in this range, use history telemetry
+    if (records.length === 0) {
+      const [historyRecords, historyTotal] = await Promise.all([
+        prisma.historyTelemetry.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          ...(offset > 0 && { skip: offset }),
+        }),
+        prisma.historyTelemetry.count({ where }),
+      ]);
+
+      records = historyRecords.map(h => ({
+        id: h.id,
+        deviceId: h.deviceId,
+        temperature: h.temperature,
+        humidity: h.humidity,
+        recordedAt: h.recordedAt,
+        createdAt: h.createdAt,
+      }));
+      total = historyTotal;
+    }
+
+    return { records, total, offset };
   }
 
   /**
    * Query history telemetry with pagination and optional time range.
    */
-  async queryHistory(deviceId, { from, to, limit = 100, offset = 0 }) {
+  async queryHistory(deviceId, { from, to, offset = 0 }) {
     const where = { deviceId };
 
     if (from || to) {
@@ -102,13 +145,12 @@ class TelemetryService {
       prisma.historyTelemetry.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
+        ...(offset > 0 && { skip: offset }),
       }),
       prisma.historyTelemetry.count({ where }),
     ]);
 
-    return { records, total, limit, offset };
+    return { records, total, offset };
   }
 
   /**
