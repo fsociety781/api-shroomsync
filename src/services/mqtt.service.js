@@ -18,6 +18,7 @@ let client = null;
 
 const SHROOMSYNC_OTA_STATUS_TOPIC_RE = /^shroomsync\/ota\/[^/]+\/status$/;
 const SCHEDULE_SLOT_ROUTE_RE = /^state\/schedule\/slot\/[1-3]$/;
+const SHROOMSYNC_DEVICE_ID_RE = /^(SS|SMC|SH|SHROOMSYNC)-/i;
 const SHROOMSYNC_DEVICE_ID_RE = /^(SCM|SS|SMC|SH|SHROOMSYNC)[-_]/i;
 const STANDARD_TOPIC_ROUTES = new Set([
   'telemetry/sensor',
@@ -125,10 +126,12 @@ const mqttService = {
 
   /**
    * Publish a command to a device via MQTT.
+   * Wraps the payload in the firmware envelope format.
    * Wraps the payload in both flat properties and nested "data" envelope
    * for maximum compatibility across all firmware versions.
    *
    * @param {string} topic — Full MQTT topic
+   * @param {object} data — Payload data (goes into "data" field)
    * @param {object} data — Payload data
    */
   publish(topic, data) {
@@ -140,6 +143,7 @@ const mqttService = {
     const payloadObj = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { value: data };
 
     const envelope = {
+      data,
       ...payloadObj,
       data: payloadObj,
       clientId: SERVER_CLIENT_ID,
@@ -402,49 +406,26 @@ const mqttService = {
   // ── TELEMETRY HANDLERS ──────────────────────
 
   async _handleSensorTelemetry(deviceId, data) {
-    const suhu = data.suhu ?? data.temperature ?? data.temp;
-    const kelembaban = data.kelembaban ?? data.humidity ?? data.hum;
-    if (suhu == null || kelembaban == null) return;
-
-    const normalized = {
-      ...data,
-      suhu: Number(suhu),
-      kelembaban: Number(kelembaban),
-    };
+    // Validate data has expected fields
+    if (data.suhu == null || data.kelembaban == null) return;
 
     // Mark device as online (auto-registers if unknown)
     await deviceService.markOnline(deviceId);
 
     // Store in database
-    await telemetryService.storeSensor(deviceId, normalized);
+    await telemetryService.storeSensor(deviceId, data);
 
     // Broadcast via Socket.IO
-    socketService.emitSensorTelemetry(deviceId, normalized);
+    socketService.emitSensorTelemetry(deviceId, data);
     socketService.emitDeviceOnline(deviceId);
   },
 
   async _handleHistoryTelemetry(deviceId, data) {
-    const suhu = data.suhu ?? data.temperature ?? data.temp;
-    const kelembaban = data.kelembaban ?? data.humidity ?? data.hum;
-    if (suhu == null || kelembaban == null) return;
-
-    const normalized = {
-      ...data,
-      suhu: Number(suhu),
-      kelembaban: Number(kelembaban),
-    };
+    if (data.suhu == null || data.kelembaban == null) return;
 
     await deviceService.markOnline(deviceId);
-
-    // Store in BOTH history and sensor telemetry tables
-    await Promise.all([
-      telemetryService.storeHistory(deviceId, normalized),
-      telemetryService.storeSensor(deviceId, normalized),
-    ]);
-
-    // Broadcast both sensor and history to Socket.IO so frontend receives real-time updates
-    socketService.emitSensorTelemetry(deviceId, normalized);
-    socketService.emitHistoryTelemetry(deviceId, normalized);
+    await telemetryService.storeHistory(deviceId, data);
+    socketService.emitHistoryTelemetry(deviceId, data);
     socketService.emitDeviceOnline(deviceId);
   },
 
